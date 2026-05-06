@@ -1,0 +1,1403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Direto XR Controller</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#0a0b0d; --panel:#111318; --border:#1e2128; --border2:#2a2d38;
+    --accent:#e8ff47; --accent2:#ff6b35; --accent3:#47c8ff; --accent4:#ff4f8b;
+    --text:#e8eaf0; --muted:#5a5f72; --red:#ff3b5c; --green:#3bff8a;
+  }
+  *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--text); font-family:'Barlow Condensed',sans-serif; min-height:100vh; overflow-x:hidden; }
+  body::before { content:''; position:fixed; inset:0; background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.04) 2px,rgba(0,0,0,0.04) 4px); pointer-events:none; z-index:1000; }
+
+  header { display:flex; align-items:center; justify-content:space-between; padding:12px 22px; background:#111318; border-bottom:1px solid var(--border); }
+  .logo { font-size:20px; font-weight:900; letter-spacing:0.12em; text-transform:uppercase; color:var(--accent); }
+  .logo span { color:var(--muted); font-weight:300; }
+  .header-right { display:flex; align-items:center; gap:20px; }
+  #conn-status, #hr-status, #pm-status, #ant-status, #ant-trainer-status { display:flex; align-items:center; gap:7px; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); }
+  .conn-dot { width:8px; height:8px; border-radius:50%; background:var(--muted); transition:background .4s; flex-shrink:0; }
+  .conn-dot.on  { background:var(--green); box-shadow:0 0 8px var(--green); }
+  .conn-dot.hr  { background:var(--accent4); box-shadow:0 0 8px var(--accent4); }
+  .conn-dot.pm  { background:var(--accent2); box-shadow:0 0 8px var(--accent2); }
+  .conn-dot.ant { background:#ff9f1c; box-shadow:0 0 8px #ff9f1c; }
+  .conn-dot.err { background:var(--red); }
+
+  .tab-nav { display:flex; border-bottom:1px solid var(--border); background:#0e0f13; }
+  .tab-btn { padding:10px 20px; font-family:'Barlow Condensed'; font-size:13px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; color:var(--muted); background:none; border:none; border-bottom:2px solid transparent; cursor:pointer; transition:all .2s; }
+  .tab-btn:hover { color:var(--text); }
+  .tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); }
+
+  .tab-page { display:none; }
+  .tab-page.active { display:grid; }
+
+  /* ── RIDE TAB ── */
+  #tab-ride { grid-template-columns:220px 1fr 280px; height:calc(100vh - 98px); }
+
+  .panel { padding:15px; border-right:1px solid var(--border); display:flex; flex-direction:column; gap:13px; overflow-y:auto; }
+  .panel.right { border-right:none; border-left:1px solid var(--border); }
+  .p-title { font-size:10px; font-weight:700; letter-spacing:0.2em; text-transform:uppercase; color:var(--muted); padding-bottom:8px; border-bottom:1px solid var(--border); }
+
+  /* stats — now 4 blocks */
+  .stats-row { display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(2,1fr); border-bottom:1px solid var(--border); }
+  .stat-blk { padding:20px 18px; border-right:1px solid var(--border); position:relative; }
+  .stat-blk:last-child { border-right:none; }
+  .stat-blk::before { content:''; position:absolute; top:0;left:0;right:0;height:2px; background:var(--accent); opacity:0; transition:opacity .3s; }
+  .stat-blk.hi::before { opacity:1; }
+  .stat-lbl { font-size:13px; letter-spacing:0.12em; text-transform:uppercase; color:var(--muted); margin-bottom:6px; }
+  .stat-val { font-family:'JetBrains Mono'; font-size:88px; font-weight:700; line-height:1; }
+  .stat-val.y { color:var(--accent); }
+  .stat-val.w { color:var(--text); }
+  .stat-val.p { color:var(--accent4); }
+  .stat-unit { font-size:14px; color:var(--muted); margin-top:4px; letter-spacing:0.08em; }
+  .tgt-row { display:flex; align-items:center; gap:5px; margin-top:5px; }
+  .tgt-lbl { font-size:16px; color:var(--muted); letter-spacing:0.08em; }
+  .tgt-v { font-family:'JetBrains Mono'; font-size:88px; font-weight:700; line-height:1; color:var(--accent2); }
+
+  .mode-bar { display:flex; align-items:center; justify-content:center; padding:10px 16px; background:#0d0e12; border-bottom:1px solid var(--border); }
+  .mode-pill { font-size:30px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; padding:3px 10px; border-radius:2px; transition:all .3s; background:rgba(71,200,255,0.12); color:var(--accent3); }
+  .mode-pill.erg      { background:rgba(232,255,71,0.12); color:var(--accent); }
+  .mode-pill.interval { background:rgba(255,107,53,0.12); color:var(--accent2); }
+
+
+  .chart-wrap { flex:1; padding:10px 12px 6px; min-height:0; }
+  canvas#chart { width:100%!important; height:100%!important; }
+
+  /* controls */
+  .ctrl-group { display:flex; flex-direction:column; gap:6px; }
+  .ctrl-group label { font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:var(--muted); display:flex; justify-content:space-between; align-items:center; }
+  .ctrl-group label span { font-family:'JetBrains Mono'; font-size:14px; color:var(--accent); font-weight:700; }
+  input[type=range] { -webkit-appearance:none; width:100%; height:4px; background:var(--border2); outline:none; border-radius:0; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:13px; height:13px; background:var(--accent); cursor:pointer; border-radius:0; border:2px solid var(--bg); }
+
+  .btn { display:block; width:100%; padding:9px 12px; font-family:'Barlow Condensed'; font-size:13px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; border:1px solid var(--border2); background:var(--panel); color:var(--text); cursor:pointer; transition:all .2s; }
+  .btn:hover  { border-color:var(--accent); color:var(--accent); }
+  .btn.primary { background:var(--accent); color:#0a0b0d; border-color:var(--accent); }
+  .btn.primary:hover { background:#d4e83c; }
+  .btn.danger  { border-color:var(--red); color:var(--red); }
+  .btn.danger:hover { background:rgba(255,59,92,.1); }
+  .btn.info    { border-color:var(--accent3); color:var(--accent3); }
+  .btn.info:hover { background:rgba(71,200,255,.1); }
+  .btn.pink    { border-color:var(--accent4); color:var(--accent4); }
+  .btn.pink:hover { background:rgba(255,79,139,.1); }
+  .btn:disabled { opacity:.3; cursor:not-allowed; }
+
+  .device-item { display:flex; align-items:center; justify-content:space-between; padding:8px 10px; background:var(--border); border:1px solid var(--border2); cursor:pointer; transition:all .2s; font-size:12px; }
+  .device-item:hover { border-color:var(--accent); background:rgba(232,255,71,.06); }
+  .device-item.hr-item:hover { border-color:var(--accent4); background:rgba(255,79,139,.06); }
+  .device-item .dname { font-weight:600; }
+  .device-item .daddr { font-family:'JetBrains Mono'; font-size:10px; color:var(--muted); }
+
+  /* HR connected badge */
+  .hr-badge { display:flex; align-items:center; gap:7px; padding:8px 10px; background:rgba(255,79,139,.08); border:1px solid rgba(255,79,139,.3); }
+  .hr-badge .hname { font-size:13px; font-weight:600; color:var(--accent4); }
+  .hr-badge .haddr { font-family:'JetBrains Mono'; font-size:10px; color:var(--muted); }
+
+  /* interval rows */
+  .int-col-heads { display:grid; grid-template-columns:1fr 1fr 50px 18px; gap:4px; }
+  .int-ch { font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); }
+  .int-rows { display:flex; flex-direction:column; gap:4px; max-height:200px; overflow-y:auto; }
+  .int-row { display:grid; grid-template-columns:1fr 1fr 44px 44px 16px; gap:3px; align-items:center; }
+  .int-cell { background:var(--border); border:1px solid var(--border2); border-radius:2px; padding:5px 7px; font-family:'JetBrains Mono'; font-size:12px; color:var(--text); width:100%; outline:none; }
+  .int-cell:focus { border-color:var(--accent); }
+  .int-del { font-size:11px; color:var(--muted); text-align:center; cursor:pointer; background:none; border:none; }
+  .int-del:hover { color:var(--red); }
+
+  .prog-wrap { display:flex; flex-direction:column; gap:6px; }
+  .prog-lbl { font-size:11px; color:var(--muted); }
+  .prog-lbl strong { color:var(--accent2); font-family:'JetBrains Mono'; }
+  .prog-track { height:4px; background:var(--border2); overflow:hidden; }
+  .prog-fill { height:100%; background:var(--accent2); transition:width 1s linear; }
+  .int-dots { display:flex; gap:3px; flex-wrap:wrap; }
+  .int-dot { width:8px; height:8px; background:var(--border2); }
+  .int-dot.done { background:var(--muted); }
+  .int-dot.cur  { background:var(--accent2); }
+
+  #log { font-family:'JetBrains Mono'; font-size:10px; color:var(--muted); display:flex; flex-direction:column; gap:3px; max-height:90px; overflow-y:auto; }
+  .log-e { display:flex; gap:6px; }
+  .log-ts { color:var(--border2); }
+  .log-ok  { color:var(--green); }
+  .log-err { color:var(--red); }
+  .log-muted { color:var(--muted); }
+
+  /* ── PLANS TAB ── */
+  #tab-plans { grid-template-columns:290px 1fr; height:calc(100vh - 98px); }
+  .plans-sidebar { border-right:1px solid var(--border); padding:15px; display:flex; flex-direction:column; gap:11px; overflow-y:auto; }
+  .plan-item { padding:9px 11px; background:var(--panel); border:1px solid var(--border2); cursor:pointer; transition:all .2s; }
+  .plan-item:hover, .plan-item.selected { border-color:var(--accent); background:rgba(232,255,71,.06); }
+  .plan-item .pname { font-size:14px; font-weight:700; }
+  .plan-item .pmeta { font-size:11px; color:var(--muted); margin-top:2px; }
+  .plan-editor { padding:20px; display:flex; flex-direction:column; gap:15px; overflow-y:auto; }
+  .plan-editor h2 { font-size:17px; font-weight:700; letter-spacing:0.06em; }
+  .field-row { display:flex; flex-direction:column; gap:5px; }
+  .field-row label { font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--muted); }
+  .field-input { background:var(--border); border:1px solid var(--border2); color:var(--text); padding:8px 11px; font-family:'JetBrains Mono'; font-size:13px; outline:none; width:100%; }
+  .field-input:focus { border-color:var(--accent); }
+  .step-table { width:100%; border-collapse:collapse; }
+  .step-table th { font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:var(--muted); text-align:left; padding:5px 8px; border-bottom:1px solid var(--border); }
+  .step-table td { padding:4px 5px; border-bottom:1px solid var(--border); }
+  .step-table input, .step-table select { background:var(--border); border:1px solid var(--border2); color:var(--text); padding:5px 7px; font-family:'JetBrains Mono'; font-size:12px; width:100%; outline:none; border-radius:2px; }
+  .step-table input:focus, .step-table select:focus { border-color:var(--accent); }
+  .del-btn { background:none; border:none; color:var(--muted); cursor:pointer; font-size:13px; padding:3px 7px; }
+  .del-btn:hover { color:var(--red); }
+  .btn-row { display:flex; gap:7px; }
+  .btn-sm { padding:7px 14px; font-family:'Barlow Condensed'; font-size:12px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; border:1px solid var(--border2); background:var(--panel); color:var(--text); cursor:pointer; transition:all .2s; }
+  .btn-sm:hover { border-color:var(--accent); color:var(--accent); }
+  .btn-sm.primary { background:var(--accent); color:#0a0b0d; border-color:var(--accent); }
+  .btn-sm.danger  { border-color:var(--red); color:var(--red); }
+  .btn-sm.danger:hover { background:rgba(255,59,92,.1); }
+  .btn-sm.orange  { border-color:var(--accent2); color:var(--accent2); }
+  .btn-sm.orange:hover { background:rgba(255,107,53,.1); }
+  .plan-preview { background:var(--panel); border:1px solid var(--border); padding:11px; }
+  .preview-bars { display:flex; align-items:flex-end; gap:2px; height:70px; overflow-x:auto; }
+  .preview-bar { min-width:10px; background:var(--accent2); opacity:.7; flex-shrink:0; }
+  .preview-bar:hover { opacity:1; }
+
+  /* ── STRAVA TAB ── */
+  #tab-strava { grid-template-columns:1fr; height:calc(100vh - 98px); overflow-y:auto; }
+  .strava-page { padding:28px; display:flex; flex-direction:column; gap:20px; max-width:700px; }
+  .strava-card { background:var(--panel); border:1px solid var(--border2); padding:18px 22px; display:flex; flex-direction:column; gap:11px; }
+  .strava-card h3 { font-size:15px; font-weight:700; letter-spacing:0.06em; }
+  .strava-card p  { font-size:13px; color:var(--muted); line-height:1.6; }
+  .status-row { display:flex; align-items:center; gap:9px; }
+  .s-dot { width:9px; height:9px; border-radius:50%; background:var(--muted); flex-shrink:0; }
+  .s-dot.ok   { background:var(--green); box-shadow:0 0 5px var(--green); }
+  .s-dot.warn { background:var(--accent); }
+  .s-txt { font-size:13px; }
+  .code-block { background:#0d0e12; border:1px solid var(--border); padding:11px 13px; font-family:'JetBrains Mono'; font-size:12px; color:var(--accent3); line-height:1.7; white-space:pre-wrap; }
+  .upload-row { display:flex; gap:7px; align-items:stretch; }
+  .upload-row input { flex:1; background:var(--border); border:1px solid var(--border2); color:var(--text); padding:8px 11px; font-family:'Barlow Condensed'; font-size:13px; outline:none; }
+  .upload-row input:focus { border-color:var(--accent); }
+  .upload-result { font-family:'JetBrains Mono'; font-size:12px; padding:9px 11px; background:#0d0e12; border:1px solid var(--border); color:var(--muted); display:none; }
+  .upload-result.ok  { border-color:var(--green); color:var(--green); }
+  .upload-result.err { border-color:var(--red);   color:var(--red); }
+
+  /* fake ride controls */
+  .fake-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .fake-field { display:flex; flex-direction:column; gap:5px; }
+  .fake-field label { font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:var(--muted); }
+  .fake-field input { background:var(--border); border:1px solid var(--border2); color:var(--text); padding:8px 11px; font-family:'JetBrains Mono'; font-size:13px; outline:none; }
+  .fake-field input:focus { border-color:var(--accent2); }
+
+  ::-webkit-scrollbar { width:4px; height:4px; }
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0 1000px var(--bg2) inset !important;
+    -webkit-text-fill-color: var(--text) !important;
+    caret-color: var(--text);
+    border-color: var(--border2) !important;
+    transition: background-color 5000s ease-in-out 0s;
+  }
+  .int-cell::-webkit-outer-spin-button,
+  .int-cell::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
+  .int-cell[type=number] { -moz-appearance:textfield; }
+  ::-webkit-scrollbar-track { background:var(--bg); }
+  ::-webkit-scrollbar-thumb { background:var(--border2); }
+
+  /* ── MOBILE ── */
+  @media (max-width: 768px) {
+    body::before { display:none; }
+
+    header { padding:10px 14px; }
+    .logo { font-size:16px; }
+    .header-right { gap:10px; }
+    #conn-status span, #hr-status span, #pm-status span, #ant-status span, #ant-trainer-status span { display:none; }
+
+    .tab-btn { padding:9px 12px; font-size:11px; letter-spacing:0.08em; }
+
+    /* Ride tab: stack vertically */
+    #tab-ride {
+      grid-template-columns: 1fr !important;
+      grid-template-rows: auto auto auto;
+      height:auto !important;
+      overflow-y:auto;
+    }
+    .panel { border-right:none !important; border-left:none !important; border-bottom:1px solid var(--border); max-height:none; }
+    .panel.right { border-bottom:none; }
+
+    /* Stats: keep 3x2 but shrink numbers */
+    .stats-row { grid-template-columns: repeat(3,1fr) !important; grid-template-rows: repeat(2,auto) !important; }
+    .stat-val { font-size:36px !important; }
+    .stat-blk { padding:10px 8px; }
+    .stat-lbl { font-size:9px !important; }
+    .stat-unit { font-size:10px !important; }
+    .tgt-row { display:none; } /* hide target row on mobile to save space */
+
+    /* Chart: fixed height on mobile */
+    .chart-wrap { height:160px; flex:none !important; }
+
+    /* Plans tab: stack */
+    #tab-plans { grid-template-columns:1fr !important; grid-template-rows:auto 1fr; }
+    .plans-sidebar { border-right:none; border-bottom:1px solid var(--border); max-height:200px; }
+
+    /* Connect tab */
+    #tab-connect .strava-page > div { grid-template-columns:1fr !important; }
+
+    /* Upload tab */
+    #tab-strava { overflow-y:auto; }
+    .strava-page { padding:16px; gap:14px; max-width:100%; }
+    .fake-grid { grid-template-columns:1fr !important; }
+
+    /* Buttons larger tap targets */
+    .btn { padding:12px 14px; font-size:14px; }
+
+    /* Interval rows */
+    .int-row { grid-template-columns: 1fr 1fr 40px 40px 18px; }
+
+    /* Mode pill smaller */
+    .mode-pill { font-size:14px !important; }
+  }
+
+  @media (max-width: 480px) {
+    .stat-val { font-size:28px !important; }
+    .tab-btn { padding:8px 7px; font-size:9px; }
+    .stat-blk { padding:8px 4px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Direto <span>XR</span> Controller</div>
+  <div class="header-right">
+    <div id="ant-status"><div class="conn-dot" id="ant-dot"></div><span id="ant-text">No ANT+ Dongle</span></div>
+    <div id="ant-trainer-status"><div class="conn-dot" id="ant-trainer-status-dot"></div><span id="ant-trainer-status-text">No ANT+ Trainer</span></div>
+    <div id="pm-status"><div class="conn-dot" id="pm-dot"></div><span id="pm-text">No power meter</span></div>
+    <div id="hr-status"><div class="conn-dot" id="hr-dot"></div><span id="hr-text">No HR monitor</span></div>
+    <div id="conn-status"><div class="conn-dot" id="conn-dot"></div><span id="conn-text">No BLE Trainer</span></div>
+  </div>
+</header>
+
+<div class="tab-nav">
+  <button class="tab-btn active" onclick="switchTab('ride')">Ride</button>
+  <button class="tab-btn"        onclick="switchTab('connect')">Connect</button>
+  <button class="tab-btn"        onclick="switchTab('plans')">Plans</button>
+  <button class="tab-btn"        onclick="switchTab('strava')">Upload</button>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ RIDE TAB -->
+<div id="tab-ride" class="tab-page active">
+
+  <!-- LEFT: ERG + Slope controls only -->
+  <div class="panel">
+    <div class="p-title">ERG Mode</div>
+    <div class="ctrl-group">
+      <label>Target Power <span id="pw-disp">150 W</span></label>
+      <input type="range" id="pw-sl" min="0" max="600" value="150" step="5" oninput="document.getElementById('pw-disp').textContent=this.value+' W'">
+    </div>
+    <button class="btn primary" id="btn-pw" onclick="setPower()" disabled>Set ERG Power</button>
+
+    <div class="p-title">Slope</div>
+    <div class="ctrl-group">
+      <label>Grade <span id="slope-disp" style="color:#ff9f1c">0.0%</span></label>
+      <input type="range" id="slope-sl" min="-10" max="24" value="0" step="0.5"
+        oninput="document.getElementById('slope-disp').textContent=parseFloat(this.value).toFixed(1)+'%'">
+    </div>
+    <button class="btn" id="btn-slope" onclick="setSlope()" style="border-color:#ff9f1c;color:#ff9f1c;opacity:.4;pointer-events:none" disabled>Set Slope</button>
+    <div style="font-size:10px;color:var(--muted);line-height:1.5">Connect ANT+ trainer in the Connect tab first.</div>
+  </div>
+
+  <!-- CENTRE: 3x3 stat grid + chart + mode bar -->
+  <div style="display:flex;flex-direction:column">
+    <div class="mode-bar">
+      <div class="mode-pill free" id="mode-pill">FREE RIDE</div>
+    </div>
+    <div class="stats-row">
+      <div class="stat-blk">
+        <div class="stat-lbl">Power</div>
+        <div class="stat-val y" id="sv-power">0</div>
+        <div class="stat-unit">watts</div>
+        <div class="tgt-row"><span class="tgt-lbl">Target</span><span class="tgt-v" id="sv-target">—</span><span class="tgt-lbl">W</span></div>
+      </div>
+      <div class="stat-blk">
+        <div class="stat-lbl">Heart Rate</div>
+        <div class="stat-val p" id="sv-hr">—</div>
+        <div class="stat-unit">bpm</div>
+      </div>
+      <div class="stat-blk">
+        <div class="stat-lbl">Cadence</div>
+        <div class="stat-val w" id="sv-cad">0</div>
+        <div class="stat-unit">rpm</div>
+      </div>
+      <div class="stat-blk" onclick="toggleSpeedUnit()" style="cursor:pointer;position:relative">
+        <div class="stat-lbl">Speed</div>
+        <div class="stat-val w" id="sv-speed">0.0</div>
+        <div class="stat-unit" id="sv-speed-unit">km/h</div>
+        <div style="position:absolute;bottom:5px;right:6px;font-size:9px;letter-spacing:0.05em;color:var(--muted);border:1px solid var(--border2);padding:1px 5px;border-radius:3px">km/h ⇄ mph</div>
+      </div>
+      <div class="stat-blk" onclick="toggleSpeedUnit()" style="cursor:pointer;position:relative">
+        <div class="stat-lbl">Distance</div>
+        <div class="stat-val w" id="sv-dist">0.0</div>
+        <div class="stat-unit" id="sv-dist-unit">km</div>
+        <div style="position:absolute;bottom:5px;right:6px;font-size:9px;letter-spacing:0.05em;color:var(--muted);border:1px solid var(--border2);padding:1px 5px;border-radius:3px">km ⇄ mi</div>
+      </div>
+      <div class="stat-blk">
+        <div class="stat-lbl">Time</div>
+        <div class="stat-val w" id="elapsed" style="font-size:52px">00:00:00</div>
+        <div class="stat-unit">elapsed</div>
+      </div>
+    </div>
+    <div class="chart-wrap" style="flex:1"><canvas id="chart"></canvas></div>
+  </div>
+
+  <!-- RIGHT: intervals + free ride + log -->
+  <div class="panel right">
+    <div class="p-title">Quick Intervals</div>
+    <div class="int-col-heads" style="grid-template-columns:1fr 1fr 44px 44px 16px">
+      <span class="int-ch">W</span><span class="int-ch">Sec</span><span class="int-ch">×</span><span class="int-ch">%</span><span></span>
+    </div>
+    <div class="int-rows" id="int-rows"></div>
+    <div style="display:flex;gap:5px">
+      <button class="btn" onclick="addIntRow()" style="flex:1">+ Step</button>
+      <button class="btn" onclick="loadPlanToRide()" style="flex:1;color:var(--accent3);border-color:var(--accent3)">Load Plan</button>
+    </div>
+    <div style="display:flex;gap:5px">
+      <button id="btn-sint" onclick="startIntervals()" disabled
+        style="flex:1;background:var(--green);color:#0a0b0d;border:none;font-family:'Barlow Condensed';font-size:13px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;padding:9px 10px;cursor:pointer;border-radius:2px;opacity:.4">
+        ▶ Start Plan
+      </button>
+      <button id="btn-stopi" onclick="stopIntervals()"
+        style="flex:1;background:var(--red);color:#fff;border:none;font-family:'Barlow Condensed';font-size:13px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;padding:9px 10px;cursor:pointer;border-radius:2px;display:none">
+        ■ Stop Plan
+      </button>
+    </div>
+    <div id="int-prog" style="display:none;flex-direction:column;gap:6px">
+      <div class="prog-lbl" id="prog-step">Step 1/1</div>
+      <div class="prog-lbl"><strong id="prog-watts">—</strong> W · <strong id="prog-rem">—</strong>s left</div>
+      <div class="prog-track"><div class="prog-fill" id="prog-fill" style="width:0%"></div></div>
+      <div class="int-dots" id="int-dots"></div>
+    </div>
+
+    <div style="height:1px;background:var(--border);margin:4px 0"></div>
+
+    <div class="p-title">Free Ride</div>
+    <div style="display:flex;gap:5px">
+      <button id="btn-rec-start" onclick="sessionStart()"
+        style="flex:1;background:var(--green);color:#0a0b0d;border:none;font-family:'Barlow Condensed';font-size:13px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;padding:9px 10px;cursor:pointer;border-radius:2px;opacity:.4" disabled>
+        ▶ Start Free Ride
+      </button>
+      <button id="btn-rec-stop" onclick="sessionStop()"
+        style="flex:1;background:var(--red);color:#fff;border:none;font-family:'Barlow Condensed';font-size:13px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;padding:9px 10px;cursor:pointer;border-radius:2px;display:none">
+        ■ Stop Free Ride
+      </button>
+    </div>
+
+    <div style="height:1px;background:var(--border);margin:4px 0"></div>
+
+    <div class="p-title">Log</div>
+    <div id="log"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ CONNECT TAB -->
+<div id="tab-connect" class="tab-page" style="overflow-y:auto">
+  <div class="strava-page" style="max-width:900px;margin:0 auto">
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+
+      <!-- BLE Trainer -->
+      <div class="strava-card">
+        <h3>BLE Trainer</h3>
+        <button class="btn" id="btn-scan" onclick="scan()">Scan for Trainer</button>
+        <div id="device-list"></div>
+        <button class="btn danger" id="btn-disc" onclick="disconnect()" disabled>Disconnect Trainer</button>
+      </div>
+
+      <!-- ANT+ -->
+      <div class="strava-card">
+        <h3>ANT+ Dongle</h3>
+        <button class="btn" id="btn-ant-connect" onclick="antConnect()" style="border-color:#ff9f1c;color:#ff9f1c">Connect ANT+ Dongle</button>
+        <div id="ant-device-info" style="display:none">
+          <div style="font-size:11px;font-weight:600;color:#ff9f1c;margin:6px 0" id="ant-dev-label">ANT+ Dongle Connected</div>
+          <button class="btn danger" id="btn-ant-disc" onclick="antDisconnect()">Disconnect ANT+</button>
+        </div>
+        <p style="font-size:11px;color:var(--muted);margin-top:6px">Required for slope control and ANT+ HR. Install libusb-win32 via Zadig first.</p>
+
+        <h3 style="margin-top:12px">ANT+ Trainer</h3>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <div class="conn-dot" id="ant-trainer-dot-c"></div>
+          <span id="ant-trainer-text-c" style="font-size:11px;color:var(--muted)">No ANT+ Trainer</span>
+        </div>
+        <button class="btn" id="btn-ant-trainer-scan" onclick="antScanTrainer()" style="border-color:#ff9f1c;color:#ff9f1c;opacity:.4;pointer-events:none" disabled>Scan for ANT+ Trainer</button>
+      </div>
+
+      <!-- HR Monitor -->
+      <div class="strava-card">
+        <h3>Heart Rate Monitor</h3>
+
+        <h3 style="margin-top:4px;font-size:13px">BLE</h3>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <div class="conn-dot" id="hr-dot-c"></div>
+          <span id="hr-text-c" style="font-size:11px;color:var(--muted)">No BLE HR</span>
+        </div>
+        <button class="btn pink" id="btn-hr-scan" onclick="scanHR()">Scan BLE HR Monitor</button>
+        <div id="hr-device-list"></div>
+        <button class="btn danger" id="btn-hr-disc" onclick="disconnectHR()" style="display:none">Disconnect HR</button>
+
+        <h3 style="margin-top:12px;font-size:13px">ANT+</h3>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <div class="conn-dot" id="ant-hr-dot-c"></div>
+          <span id="ant-hr-text-c" style="font-size:11px;color:var(--muted)">No ANT+ HR</span>
+        </div>
+        <button class="btn" id="btn-ant-hr-scan" onclick="scanAntHR()" style="border-color:#ff9f1c;color:#ff9f1c;display:none">Scan ANT+ HR Monitor</button>
+      </div>
+
+      <!-- Power Meter -->
+      <div class="strava-card">
+        <h3>Power Meter</h3>
+        <button class="btn" id="btn-pm-scan" onclick="scanPM()" style="border-color:var(--accent2);color:var(--accent2)">Scan for Power Meter</button>
+        <div id="pm-device-list"></div>
+        <div id="pm-connected-badge" style="display:none"></div>
+        <div id="pm-source-toggle" style="display:none">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--muted);padding:6px 0">
+            <input type="checkbox" id="pm-use-toggle" onchange="togglePMSource(this.checked)" style="width:16px;height:16px;accent-color:var(--accent2)">
+            Use power meter as source
+          </label>
+          <div style="font-size:10px;color:var(--muted);line-height:1.5">Overrides trainer power &amp; cadence readings.</div>
+        </div>
+        <button class="btn danger" id="btn-pm-disc" onclick="disconnectPM()" style="display:none">Disconnect Power Meter</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ PLANS TAB -->
+<div id="tab-plans" class="tab-page">
+  <div class="plans-sidebar">
+    <div class="p-title">Saved Plans</div>
+    <button class="btn primary" onclick="newPlan()">+ New Plan</button>
+    <div id="plan-list"></div>
+  </div>
+  <div class="plan-editor" id="plan-editor">
+    <div style="color:var(--muted);font-size:14px;margin-top:40px;text-align:center">Select a plan or create a new one</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ UPLOAD TAB -->
+<div id="tab-strava" class="tab-page">
+  <div class="strava-page">
+
+    <!-- ── STRAVA ── -->
+    <!-- Auto-upload preference -->
+    <div class="strava-card">
+      <h3>Auto-Upload on Stop</h3>
+      <p>When you hit ■ STOP on the Ride tab, your session is automatically uploaded to your chosen platform.</p>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--text)">
+          <input type="radio" name="auto-upload" value="none"    id="au-none"   onchange="saveAutoUpload(this.value)" style="accent-color:var(--accent)"> Don't auto-upload
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--text)">
+          <input type="radio" name="auto-upload" value="strava"  id="au-strava" onchange="saveAutoUpload(this.value)" style="accent-color:var(--accent)"> Upload to Strava
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--text)">
+          <input type="radio" name="auto-upload" value="garmin"  id="au-garmin" onchange="saveAutoUpload(this.value)" style="accent-color:var(--accent)"> Upload to Garmin Connect
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--text)">
+          <input type="radio" name="auto-upload" value="both"    id="au-both"   onchange="saveAutoUpload(this.value)" style="accent-color:var(--accent)"> Upload to both
+        </label>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+        <span style="font-size:12px;color:var(--muted)">Ride name prefix:</span>
+        <input id="ride-name-prefix" type="text" placeholder="Indoor Ride"
+          style="flex:1;background:var(--border);border:1px solid var(--border2);color:var(--text);padding:6px 10px;font-family:'Barlow Condensed';font-size:13px;outline:none"
+          onchange="saveAutoUpload()">
+      </div>
+      <div id="auto-upload-status" style="font-family:var(--font-mono,monospace);font-size:11px;color:var(--muted);display:none"></div>
+    </div>
+
+    <div style="font-size:11px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:var(--muted);padding-bottom:4px;border-bottom:1px solid var(--border)">Strava</div>
+
+    <div class="strava-card">
+      <h3>Strava Connection</h3>
+      <div class="status-row"><div class="s-dot" id="s-cfg-dot"></div><span class="s-txt" id="s-cfg-txt">Checking…</span></div>
+      <div class="status-row"><div class="s-dot" id="s-auth-dot"></div><span class="s-txt" id="s-auth-txt">Not authenticated</span></div>
+      <button class="btn-sm" id="btn-strava-auth" onclick="stravaAuth()">Connect Strava Account</button>
+    </div>
+
+    <div class="strava-card">
+      <h3>One-time Strava setup</h3>
+      <p>1. Go to <strong style="color:var(--accent3)">strava.com/settings/api</strong> and create an app.<br>
+         2. Set <em>Authorization Callback Domain</em> to <code style="color:var(--accent)">localhost</code>.<br>
+         3. Open <code style="color:var(--accent)">strava_config.json</code> and fill in your credentials:</p>
+      <div class="code-block">{
+  "client_id":     "YOUR_CLIENT_ID",
+  "client_secret": "YOUR_CLIENT_SECRET"
+}</div>
+      <p>4. Restart the server, then click <em>Connect Strava Account</em> above.</p>
+    </div>
+
+    <div class="strava-card">
+      <h3>Upload ride to Strava</h3>
+      <p>Uploads your current or last session as a Virtual Ride. HR data included automatically if an HR monitor was connected.</p>
+      <div class="upload-row">
+        <input id="upload-name" type="text" placeholder="Ride name (optional)">
+        <button class="btn-sm primary" onclick="uploadStrava()">Upload to Strava</button>
+      </div>
+      <div style="display:flex;gap:7px;margin-top:6px">
+        <button class="btn-sm" onclick="downloadFit(false)" style="border-color:var(--muted);color:var(--muted)">⬇ Download FIT file</button>
+      </div>
+      <div class="upload-result" id="upload-result"></div>
+    </div>
+
+    <!-- ── GARMIN ── -->
+    <div style="font-size:11px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:var(--muted);padding-bottom:4px;border-bottom:1px solid var(--border);margin-top:8px">Garmin Connect</div>
+
+    <div class="strava-card">
+      <h3>Garmin Connection</h3>
+      <div class="status-row"><div class="s-dot" id="g-auth-dot"></div><span class="s-txt" id="g-auth-txt">Not logged in</span></div>
+
+      <!-- Login form (shown when not authed) -->
+      <div id="garmin-login-form" style="display:flex;flex-direction:column;gap:10px">
+        <p style="font-size:12px;color:var(--muted)">Enter your Garmin Connect credentials. Your password is used once to obtain a session token and is never stored on disk.</p>
+        <div class="fake-grid">
+          <div class="fake-field" style="grid-column:1/-1">
+            <label>Garmin Connect Email</label>
+            <input id="g-email" type="email" placeholder="you@example.com" autocomplete="username">
+          </div>
+          <div class="fake-field" style="grid-column:1/-1">
+            <label>Password</label>
+            <input id="g-password" type="password" placeholder="••••••••" autocomplete="current-password">
+          </div>
+        </div>
+        <div style="display:flex;gap:7px;align-items:center">
+          <button class="btn-sm primary" onclick="garminLogin()">Log in to Garmin</button>
+          <span id="garmin-login-status" style="font-family:var(--font-mono,monospace);font-size:11px;color:var(--muted)"></span>
+        </div>
+      </div>
+
+      <!-- Logout button (shown when authed) -->
+      <div id="garmin-logout-form" style="display:none">
+        <button class="btn-sm danger" onclick="garminLogout()">Disconnect Garmin</button>
+      </div>
+    </div>
+
+    <div class="strava-card">
+      <h3>Upload ride to Garmin Connect</h3>
+      <p>Uploads your current or last session to Garmin Connect as an Indoor Cycling activity. HR data included if recorded.</p>
+      <div class="upload-row">
+        <input id="garmin-upload-name" type="text" placeholder="Ride name (optional)">
+        <button class="btn-sm" onclick="uploadGarmin()" style="border-color:var(--accent3);color:var(--accent3)">Upload to Garmin</button>
+      </div>
+      <div class="upload-result" id="garmin-upload-result"></div>
+    </div>
+
+    <!-- ── TEST / FAKE RIDE ── -->
+    <div style="font-size:11px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:var(--muted);padding-bottom:4px;border-bottom:1px solid var(--border);margin-top:8px">Test Upload</div>
+
+    <div class="strava-card">
+      <h3>Fake ride generator</h3>
+      <p>Generates a realistic fake ride (warmup → intervals → cooldown) with simulated HR — useful for testing your connections without needing to ride.</p>
+      <div class="fake-grid">
+        <div class="fake-field">
+          <label>Duration (minutes)</label>
+          <input id="fake-duration" type="number" value="30" min="5" max="180">
+        </div>
+        <div class="fake-field">
+          <label>Your FTP (watts)</label>
+          <input id="fake-ftp" type="number" value="220" min="50" max="600">
+        </div>
+        <div class="fake-field" style="grid-column:1/-1">
+          <label>Activity name</label>
+          <input id="fake-name" type="text" placeholder="Auto-named if blank">
+        </div>
+      </div>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-top:4px">
+        <button class="btn-sm orange" onclick="uploadFakeRide('strava')">Upload fake → Strava</button>
+        <button class="btn-sm" onclick="uploadFakeRide('garmin')" style="border-color:var(--accent3);color:var(--accent3)">Upload fake → Garmin</button>
+        <button class="btn-sm" onclick="downloadFit(true)" style="border-color:var(--muted);color:var(--muted)">⬇ Download fake FIT</button>
+      </div>
+      <div class="upload-result" id="fake-result"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── Chart ─────────────────────────────────────────────────────────────────────
+const canvas = document.getElementById('chart');
+const ctx = canvas.getContext('2d');
+let chartData = [];
+let showHR = true;
+
+function resizeCanvas() { const w=canvas.parentElement; canvas.width=w.clientWidth; canvas.height=w.clientHeight; }
+window.addEventListener('resize', ()=>{ resizeCanvas(); drawChart(); });
+resizeCanvas();
+
+function drawChart() {
+  const W=canvas.width, H=canvas.height;
+  ctx.clearRect(0,0,W,H);
+  if (chartData.length < 2) {
+    ctx.fillStyle='#0d0e12'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#2a2d38'; ctx.font='13px Barlow Condensed'; ctx.textAlign='center';
+    ctx.fillText('Waiting for data…',W/2,H/2); return;
+  }
+
+  const hasHR = chartData.some(d=>d.hr>0);
+  // Wider right padding when showing HR axis labels
+  const pad={top:14, right: hasHR ? 38 : 14, bottom:30, left:46};
+  const cW=W-pad.left-pad.right, cH=H-pad.top-pad.bottom;
+
+  // Power scale (left axis)
+  const maxP = Math.max(50,...chartData.map(d=>d.power)) * 1.15;
+  const tMin=chartData[0].t, tMax=chartData[chartData.length-1].t, tR=Math.max(tMax-tMin,1);
+  const xOf = t  => pad.left + ((t-tMin)/tR)*cW;
+  const yOfP = v => pad.top  + cH - (v/maxP)*cH;
+
+  // HR scale (right axis) — 40bpm min, 220bpm max, padded
+  const hrVals = chartData.filter(d=>d.hr>0).map(d=>d.hr);
+  const minHR = hasHR ? Math.max(40,  Math.min(...hrVals) - 10) : 40;
+  const maxHR = hasHR ? Math.min(220, Math.max(...hrVals) + 10) : 220;
+  const hrRange = Math.max(1, maxHR - minHR);
+  const yOfHR = v => pad.top + cH - ((v - minHR) / hrRange) * cH;
+
+  // Background
+  ctx.fillStyle='#0d0e12'; ctx.fillRect(0,0,W,H);
+
+  // Grid lines + left (power) labels
+  ctx.strokeStyle='#1a1c23'; ctx.lineWidth=1;
+  for (let i=0;i<=4;i++) {
+    const y=pad.top+(i/4)*cH;
+    ctx.beginPath(); ctx.moveTo(pad.left,y); ctx.lineTo(W-pad.right,y); ctx.stroke();
+    ctx.fillStyle='#3a3f50'; ctx.font='10px JetBrains Mono'; ctx.textAlign='right';
+    ctx.fillText(Math.round(maxP*(1-i/4)), pad.left-4, y+4);
+  }
+
+  // Right axis — HR labels
+  if (hasHR) {
+    ctx.fillStyle='rgba(255,79,139,0.5)'; ctx.font='10px JetBrains Mono'; ctx.textAlign='left';
+    for (let i=0;i<=4;i++) {
+      const hrVal = minHR + (hrRange * (1 - i/4));
+      const y = pad.top + (i/4)*cH;
+      ctx.fillText(Math.round(hrVal)+'♥', W-pad.right+4, y+4);
+    }
+  }
+
+  // Power gradient fill
+  const g=ctx.createLinearGradient(0,pad.top,0,pad.top+cH);
+  g.addColorStop(0,'rgba(232,255,71,0.20)'); g.addColorStop(1,'rgba(232,255,71,0.01)');
+  ctx.beginPath(); ctx.moveTo(xOf(chartData[0].t), yOfP(0));
+  chartData.forEach(d=>ctx.lineTo(xOf(d.t), yOfP(d.power)));
+  ctx.lineTo(xOf(chartData[chartData.length-1].t), yOfP(0)); ctx.closePath();
+  ctx.fillStyle=g; ctx.fill();
+
+  // Power line
+  ctx.beginPath();
+  chartData.forEach((d,i)=> i===0 ? ctx.moveTo(xOf(d.t),yOfP(d.power)) : ctx.lineTo(xOf(d.t),yOfP(d.power)));
+  ctx.strokeStyle='#e8ff47'; ctx.lineWidth=2; ctx.lineJoin='round'; ctx.stroke();
+
+  // Cadence line (scaled against power axis, 160rpm max feels reasonable)
+  ctx.beginPath();
+  chartData.forEach((d,i)=>{
+    const y=pad.top+cH-(d.cadence/160)*cH;
+    i===0 ? ctx.moveTo(xOf(d.t),y) : ctx.lineTo(xOf(d.t),y);
+  });
+  ctx.strokeStyle='rgba(71,200,255,0.5)'; ctx.lineWidth=1.5; ctx.stroke();
+
+  // HR line — uses independent right-axis scale
+  if (hasHR) {
+    ctx.beginPath();
+    let started=false;
+    chartData.forEach(d=>{
+      if(!d.hr){ started=false; return; }
+      const x=xOf(d.t), y=yOfHR(d.hr);
+      started ? ctx.lineTo(x,y) : ctx.moveTo(x,y);
+      started=true;
+    });
+    ctx.strokeStyle='rgba(255,79,139,0.9)'; ctx.lineWidth=2; ctx.lineJoin='round'; ctx.stroke();
+  }
+
+  // X axis time labels
+  ctx.fillStyle='#3a3f50'; ctx.font='10px JetBrains Mono'; ctx.textAlign='center';
+  for (let i=0;i<=5;i++) {
+    const t=tMin+(i/5)*tR, x=xOf(t), sec=Math.round(t);
+    ctx.fillText(`${String(Math.floor(sec/60)).padStart(2,'0')}:${String(sec%60).padStart(2,'0')}`,x,H-5);
+  }
+
+  // Legend
+  ctx.font='11px Barlow Condensed'; ctx.textAlign='left';
+  ctx.fillStyle='#e8ff47';                  ctx.fillText('■ Power',   pad.left+4,   pad.top+11);
+  ctx.fillStyle='rgba(71,200,255,0.8)';     ctx.fillText('■ Cadence', pad.left+62,  pad.top+11);
+  if (hasHR) {
+    ctx.fillStyle='rgba(255,79,139,0.9)';   ctx.fillText('■ HR',      pad.left+140, pad.top+11);
+  }
+}
+setInterval(drawChart,1000); drawChart();
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let connected=false, hrConnected=false, pmConnected=false, usePM=false, elapsedSec=0, timerInt=null;
+let speedUnit='kmh'; // 'kmh' or 'mph'
+let recording=false;
+let antConnected=false;
+let autoUploadPref='none';  // loaded from server settings
+let lastSpeedKmh=0;  // store raw km/h to reconvert on unit switch
+let totalDistKm=0;   // accumulated session distance in km
+let rideHistory=[], rideSessionStart=null;
+let intSteps=[{id:1,watts:100,duration:120,reps:1,grade:null},{id:2,watts:220,duration:180,reps:1,grade:null},{id:3,watts:280,duration:120,reps:1,grade:null},{id:4,watts:100,duration:60,reps:1,grade:null}];
+let nextId=10;
+
+// ── WebSocket ─────────────────────────────────────────────────────────────────
+let ws;
+function connectWS() { ws=new WebSocket('ws://localhost:8000/ws'); ws.onmessage=e=>handle(JSON.parse(e.data)); ws.onclose=()=>setTimeout(connectWS,2000); ws.onerror=()=>{}; }
+function send(o) { if(ws&&ws.readyState===1) ws.send(JSON.stringify(o)); }
+
+function handle(m) {
+  switch(m.type) {
+    case 'status':
+      if(m.connected) setConn(m.name);
+      if(m.ant_connected) {
+        antConnected=true;
+        document.getElementById('ant-dot').className='conn-dot ant';
+        document.getElementById('ant-text').textContent='ANT+ Dongle';
+        const ahb=document.getElementById('btn-ant-hr-scan');
+        if(ahb) ahb.style.display='block';
+      }
+      if(m.ant_available===false) {
+        const b=document.getElementById('btn-ant-connect');
+        if(b){ b.title='openant not installed'; b.style.opacity='.4'; }
+      }
+      if(m.hr_connected) setHRConn(m.hr_name);
+      if(m.pm_connected) { setPMConn(m.pm_name); if(m.use_pm){usePM=true;document.getElementById('pm-use-toggle').checked=true;updatePMSourceLabel();} }
+      updateMode(m.mode,m.target_power);
+      break;
+    case 'scan_results':    renderDevices(m.devices); break;
+    case 'hr_scan_results': renderHRDevices(m.devices); break;
+    case 'pm_scan_results': renderPMDevices(m.devices); break;
+    case 'connected':    setConn(m.name); log(`Connected to ${m.name}`,'ok'); break;
+    case 'disconnected':
+      rideHistory=m.history||[]; rideSessionStart=m.session_start;
+      setDisconn(); log('Trainer disconnected'); break;
+    case 'hr_connected':
+      setHRConn(m.name);
+      log(`HR monitor: ${m.name}`,'ok');
+      break;
+    case 'hr_disconnected':
+      setHRDisconn();
+      const ahd2=document.getElementById('ant-hr-dot-c'); if(ahd2) ahd2.className='conn-dot';
+      const aht2=document.getElementById('ant-hr-text-c'); if(aht2) aht2.textContent='No ANT+ HR';
+      const ahb2=document.getElementById('btn-ant-hr-scan');
+      if(ahb2 && antConnected) ahb2.style.display='block';
+      log('HR monitor disconnected');
+      break;
+    case 'hr_update':
+      document.getElementById('sv-hr').textContent=m.hr||'—';
+      break;
+    case 'pm_connected':    setPMConn(m.name); log(`Power meter: ${m.name}`,'ok'); break;
+    case 'pm_disconnected': setPMDisconn(); log('Power meter disconnected'); break;
+    case 'pm_update':
+      if(!usePM) break;
+      document.getElementById('sv-power').textContent=m.power||0;
+      if(m.cadence>0) document.getElementById('sv-cad').textContent=m.cadence;
+      break;
+    case 'session_started':
+      recording=true;
+      document.getElementById('btn-rec-start').style.display='none';
+      document.getElementById('btn-rec-stop').style.display='inline-block';
+      totalDistKm=0; updateDistDisplay();
+      startTimer();
+      log('Recording started','ok');
+      break;
+    case 'session_stopped':
+      recording=false;
+      document.getElementById('btn-rec-stop').style.display='none';
+      document.getElementById('btn-rec-start').style.display='inline-block';
+      // Re-enable the start button (it stays enabled as long as trainer is connected)
+      if(connected) {
+        const rb=document.getElementById('btn-rec-start');
+        if(rb){ rb.disabled=false; rb.style.opacity='1'; }
+      }
+      // Reset timer and distance
+      clearInterval(timerInt); timerInt=null; elapsedSec=0;
+      document.getElementById('elapsed').textContent='00:00:00';
+      totalDistKm=0; updateDistDisplay();
+      document.getElementById('sv-target').textContent='—';
+      if(m.history)  rideHistory=m.history;
+      if(m.session_start) rideSessionStart=m.session_start;
+      log('Session stopped','ok');
+      break;
+    case 'auto_upload_result':
+      const icon = m.ok ? '✓' : '✗';
+      const plat = m.platform==='strava' ? 'Strava' : 'Garmin';
+      const msg2 = m.ok ? `${icon} ${plat} upload OK (ID: ${m.upload_id})` : `${icon} ${plat}: ${m.error}`;
+      log(msg2, m.ok?'ok':'err');
+      showAutoUploadToast(msg2, m.ok);
+      break;
+    case 'ant_connected':
+      antConnected=true;
+      document.getElementById('ant-dot').className='conn-dot ant';
+      document.getElementById('ant-text').textContent='ANT+ Dongle';
+      document.getElementById('ant-device-info').style.display='block';
+      document.getElementById('btn-ant-connect').style.display='none';
+      const antHrBtn=document.getElementById('btn-ant-hr-scan');
+      if(antHrBtn) antHrBtn.style.display='block';
+      // Enable scan for trainer button
+      const atb=document.getElementById('btn-ant-trainer-scan');
+      if(atb){ atb.disabled=false; atb.style.opacity='1'; atb.style.pointerEvents='auto'; }
+
+      document.getElementById('ant-dev-label').textContent='ANT+ Trainer #'+m.device_id;
+      log('ANT+ trainer connected (id='+m.device_id+')','ok');
+      break;
+    case 'ant_disconnected':
+      antConnected=false;
+      document.getElementById('ant-dot').className='conn-dot';
+      document.getElementById('ant-text').textContent='No ANT+ Dongle';
+      document.getElementById('ant-device-info').style.display='none';
+      document.getElementById('btn-ant-connect').style.display='block';
+
+      const antHrBtn2=document.getElementById('btn-ant-hr-scan');
+      if(antHrBtn2) antHrBtn2.style.display='none';
+      // Reset header trainer dot
+      document.getElementById('ant-trainer-status-dot').className='conn-dot';
+      document.getElementById('ant-trainer-status-text').textContent='No ANT+ Trainer';
+      // Disable trainer scan and slope
+      const atb2=document.getElementById('btn-ant-trainer-scan');
+      if(atb2){ atb2.disabled=true; atb2.style.opacity='.4'; atb2.style.pointerEvents='none'; }
+      const slb=document.getElementById('btn-slope');
+      if(slb){ slb.disabled=true; slb.style.opacity='.4'; slb.style.pointerEvents='none'; }
+      const atdot=document.getElementById('ant-trainer-dot');
+      if(atdot) atdot.className='conn-dot';
+      const attxt=document.getElementById('ant-trainer-text');
+      if(attxt) attxt.textContent='No ANT+ Trainer';
+      break;
+    case 'ant_telemetry':
+      if(m.data.power_w!==undefined)    document.getElementById('sv-power').textContent=m.data.power_w;
+      if(m.data.cadence_rpm!==undefined) document.getElementById('sv-cad').textContent=m.data.cadence_rpm;
+      if(m.data.speed_kmh!==undefined)  { lastSpeedKmh=Number(m.data.speed_kmh); updateSpeedDisplay(); }
+      break;
+    case 'ant_trainer_connected':
+      const atd=document.getElementById('ant-trainer-dot-c'); if(atd) atd.className='conn-dot ant';
+      const att=document.getElementById('ant-trainer-text-c'); if(att) att.textContent='ANT+ Trainer #'+m.device_id;
+      document.getElementById('ant-dev-label').textContent='ANT+ Trainer #'+m.device_id;
+      document.getElementById('ant-trainer-status-dot').className='conn-dot ant';
+      document.getElementById('ant-trainer-status-text').textContent=m.device_id?'ANT+ #'+m.device_id:'ANT+ Trainer';
+      const slb2=document.getElementById('btn-slope');
+      if(slb2){ slb2.disabled=false; slb2.style.opacity='1'; slb2.style.pointerEvents='auto'; }
+      const atb3=document.getElementById('btn-ant-trainer-scan');
+      if(atb3) atb3.textContent='Scan for ANT+ Trainer';
+      log('ANT+ trainer connected (#'+m.device_id+')','ok');
+      break;
+    case 'pm_source_changed':
+      usePM=m.use_pm;
+      document.getElementById('pm-use-toggle').checked=usePM;
+      updatePMSourceLabel();
+      break;
+    case 'telemetry':
+      updateStats(m.data);
+      if(m.history){
+        chartData=m.history; drawChart();
+        // Recalculate total distance from history (speed km/h * interval in hours)
+        if(m.history.length>1){
+          totalDistKm=0;
+          for(let i=1;i<m.history.length;i++){
+            const dt=(m.history[i].t - m.history[i-1].t)/3600; // hours
+            const avgSpd=(m.history[i].speed + m.history[i-1].speed)/2;
+            totalDistKm += avgSpd * dt;
+          }
+          updateDistDisplay();
+        }
+      }
+      if(m.history?.length){ rideHistory=m.history; rideSessionStart=rideSessionStart||(Date.now()/1000-(m.history[m.history.length-1].t||0)); }
+      break;
+    case 'mode_update': updateMode(m.mode,m.target_power); break;
+    case 'interval_started':
+      renderDots(m.plan); document.getElementById('int-prog').style.display='flex';
+      // Toggle plan buttons
+      document.getElementById('btn-sint').style.display='none';
+      document.getElementById('btn-stopi').style.display='inline-block';
+      // Toggle rec buttons
+      recording=true;
+      document.getElementById('btn-rec-start').style.display='none';
+      document.getElementById('btn-rec-stop').style.display='inline-block';
+      break;
+    case 'interval_step':
+      document.getElementById('prog-step').textContent=`Step ${m.index+1}/${m.total}${m.reps>1?` (rep ${m.rep}/${m.reps})`:''}`;
+      document.getElementById('prog-watts').textContent=m.step.watts;
+      document.getElementById('prog-rem').textContent=m.step.duration;
+      document.querySelectorAll('.int-dot').forEach((d,i)=>{d.classList.toggle('cur',i===m.index);d.classList.toggle('done',i<m.index);});
+      // Update the big target display in the power stat block
+      document.getElementById('sv-target').textContent=m.step.watts||'—';
+      updateMode('interval', m.step.watts);
+      break;
+    case 'interval_tick':
+      document.getElementById('prog-rem').textContent=m.duration-m.elapsed;
+      document.getElementById('prog-fill').style.width=`${(m.elapsed/m.duration)*100}%`;
+      break;
+    case 'interval_done': case 'interval_stopped':
+      document.getElementById('int-prog').style.display='none';
+      document.getElementById('btn-stopi').style.display='none';
+      const sib=document.getElementById('btn-sint');
+      if(sib){ sib.style.display='inline-block'; sib.disabled=false; sib.style.opacity='1'; }
+      // Reset timer, distance and target
+      clearInterval(timerInt); timerInt=null; elapsedSec=0;
+      document.getElementById('elapsed').textContent='00:00:00';
+      totalDistKm=0; updateDistDisplay();
+      document.getElementById('sv-target').textContent='—';
+      updateMode('free');
+      break;
+    case 'error': log(m.msg,'err'); break;
+    case 'log':   log(m.msg); break;
+  }
+}
+
+// ── UI helpers ────────────────────────────────────────────────────────────────
+function setConn(name) {
+  connected=true;
+  document.getElementById('conn-dot').className='conn-dot on';
+  document.getElementById('conn-text').textContent='BLE Trainer';
+  ['btn-disc','btn-pw'].forEach(id=>{ const el=document.getElementById(id); if(el) el.disabled=false; });
+  const rb=document.getElementById('btn-rec-start'); if(rb){ rb.disabled=false; rb.style.opacity='1'; }
+  const si=document.getElementById('btn-sint'); if(si){ si.disabled=false; si.style.opacity='1'; }
+  document.getElementById('btn-scan').disabled=true;
+}
+function setDisconn() {
+  connected=false; clearInterval(timerInt);
+  document.getElementById('conn-dot').className='conn-dot';
+  document.getElementById('conn-text').textContent='No BLE Trainer';
+  document.getElementById('btn-scan').disabled=false;
+  document.getElementById('btn-disc').disabled=true;
+  ['btn-pw','btn-sint'].forEach(id=>{ const el=document.getElementById(id); if(el) el.disabled=true; });
+  const rb2=document.getElementById('btn-rec-start'); if(rb2){ rb2.disabled=true; rb2.style.opacity='.4'; }
+  document.getElementById('btn-rec-stop').style.display='none';
+  document.getElementById('btn-rec-start').style.display='inline-block';
+}
+function setHRConn(name) {
+  hrConnected=true;
+  document.getElementById('hr-dot').className='conn-dot hr';
+  document.getElementById('hr-text').textContent=name||'HR Monitor';
+  document.getElementById('btn-hr-disc').style.display='block';
+  document.getElementById('btn-hr-scan').style.display='none';
+  document.getElementById('hr-device-list').innerHTML='';
+  // Update the correct connect tab dot — ANT+ or BLE
+  const isAnt = name && name.includes('ANT+');
+  if(isAnt) {
+    const d=document.getElementById('ant-hr-dot-c'); if(d) d.className='conn-dot hr';
+    const t=document.getElementById('ant-hr-text-c'); if(t) t.textContent=name;
+    const b=document.getElementById('btn-ant-hr-scan'); if(b) b.style.display='none';
+  } else {
+    const d=document.getElementById('hr-dot-c'); if(d) d.className='conn-dot hr';
+    const t=document.getElementById('hr-text-c'); if(t) t.textContent=name||'HR Monitor';
+  }
+}
+function setHRDisconn() {
+  hrConnected=false;
+  document.getElementById('hr-dot').className='conn-dot';
+  document.getElementById('hr-text').textContent='No HR monitor';
+  document.getElementById('sv-hr').textContent='—';
+  document.getElementById('btn-hr-disc').style.display='none';
+  document.getElementById('btn-hr-scan').style.display='block';
+  // Reset connect tab
+  const dc=document.getElementById('hr-dot-c'); if(dc) dc.className='conn-dot';
+  const tc=document.getElementById('hr-text-c'); if(tc) tc.textContent='No BLE HR';
+}
+function setPMConn(name) {
+  pmConnected=true;
+  document.getElementById('pm-dot').className='conn-dot pm';
+  document.getElementById('pm-text').textContent=name||'Power Meter';
+  document.getElementById('pm-connected-badge').style.display='block';
+  document.getElementById('pm-connected-badge').innerHTML=`<div class="hr-badge" style="border-color:rgba(255,107,53,.4);background:rgba(255,107,53,.08)"><div><div class="hname" style="color:var(--accent2)">${name}</div><div class="haddr">Power Meter</div></div></div>`;
+  document.getElementById('pm-source-toggle').style.display='block';
+  document.getElementById('btn-pm-disc').style.display='block';
+  document.getElementById('btn-pm-scan').style.display='none';
+  document.getElementById('pm-device-list').innerHTML='';
+}
+function setPMDisconn() {
+  pmConnected=false; usePM=false;
+  document.getElementById('pm-dot').className='conn-dot';
+  document.getElementById('pm-text').textContent='No power meter';
+  document.getElementById('pm-connected-badge').style.display='none';
+  document.getElementById('pm-source-toggle').style.display='none';
+  document.getElementById('btn-pm-disc').style.display='none';
+  document.getElementById('btn-pm-scan').style.display='block';
+  document.getElementById('pm-use-toggle').checked=false;
+}
+function updatePMSourceLabel() {
+  const lbl = document.querySelector('#pm-source-toggle label');
+  if(lbl) lbl.style.color = usePM ? 'var(--accent2)' : 'var(--muted)';
+}
+function updateStats(d) {
+  if(d.power_w!==undefined)     document.getElementById('sv-power').textContent=d.power_w;
+  if(d.cadence_rpm!==undefined) document.getElementById('sv-cad').textContent=d.cadence_rpm;
+  if(d.speed_kmh!==undefined) {
+    lastSpeedKmh=Number(d.speed_kmh);
+    updateSpeedDisplay();
+  }
+  if(d.hr!==undefined&&d.hr>0) document.getElementById('sv-hr').textContent=d.hr;
+}
+function updateSpeedDisplay() {
+  const el=document.getElementById('sv-speed');
+  const unit=document.getElementById('sv-speed-unit');
+  if(!el||!unit) return;
+  if(speedUnit==='mph') {
+    el.textContent=(lastSpeedKmh*0.621371).toFixed(1);
+    unit.textContent='mph';
+  } else {
+    el.textContent=lastSpeedKmh.toFixed(1);
+    unit.textContent='km/h';
+  }
+  updateDistDisplay();
+}
+function updateDistDisplay() {
+  const el=document.getElementById('sv-dist');
+  const unit=document.getElementById('sv-dist-unit');
+  if(!el||!unit) return;
+  if(speedUnit==='mph') {
+    el.textContent=(totalDistKm*0.621371).toFixed(2);
+    unit.textContent='mi';
+  } else {
+    el.textContent=totalDistKm.toFixed(2);
+    unit.textContent='km';
+  }
+}
+function toggleSpeedUnit() {
+  speedUnit = speedUnit==='kmh' ? 'mph' : 'kmh';
+  updateSpeedDisplay();
+  // Flash both unit labels to confirm the toggle
+  ['sv-speed-unit','sv-dist-unit'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el){ el.style.color='var(--accent)'; setTimeout(()=>el.style.color='',600); }
+  });
+}
+function updateMode(mode,tp) {
+  const p=document.getElementById('mode-pill');
+  const labels={free:'FREE RIDE',erg:'ERG MODE',interval:'INTERVAL'};
+  p.className='mode-pill '+(mode||'free'); p.textContent=labels[mode]||'FREE RIDE';
+  if(tp!==undefined) document.getElementById('sv-target').textContent=tp||'—';
+}
+function renderDevices(devs) {
+  const el=document.getElementById('device-list');
+  el.innerHTML=devs.length
+    ? devs.map(d=>`<div class="device-item" onclick="connectDev('${d.address}','${d.name}')"><div><div class="dname">${d.name}</div><div class="daddr">${d.address}</div></div><span style="color:var(--accent)">›</span></div>`).join('')
+    : '<div style="font-size:11px;color:var(--muted)">No trainers found</div>';
+}
+function renderHRDevices(devs) {
+  const el=document.getElementById('hr-device-list');
+  el.innerHTML=devs.length
+    ? devs.map(d=>`<div class="device-item hr-item" onclick="connectHRDev('${d.address}','${d.name}')"><div><div class="dname">${d.name}</div><div class="daddr">${d.address}</div></div><span style="color:var(--accent4)">›</span></div>`).join('')
+    : '<div style="font-size:11px;color:var(--muted)">No HR monitors found</div>';
+}
+function renderPMDevices(devs) {
+  const el=document.getElementById('pm-device-list');
+  el.innerHTML=devs.length
+    ? devs.map(d=>`<div class="device-item" style="border-color:var(--border2)" onclick="connectPMDev('${d.address}','${d.name}')"><div><div class="dname">${d.name}</div><div class="daddr">${d.address}</div></div><span style="color:var(--accent2)">›</span></div>`).join('')
+    : '<div style="font-size:11px;color:var(--muted)">No power meters found</div>';
+}
+function startTimer() {
+  elapsedSec=0; clearInterval(timerInt);
+  timerInt=setInterval(()=>{ elapsedSec++; const h=Math.floor(elapsedSec/3600),m=Math.floor((elapsedSec%3600)/60),s=elapsedSec%60; document.getElementById('elapsed').textContent=`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`; },1000);
+}
+function log(msg,type='muted') {
+  const el=document.getElementById('log');
+  const ts=new Date().toTimeString().slice(0,8);
+  const d=document.createElement('div'); d.className='log-e';
+  d.innerHTML=`<span class="log-ts">${ts}</span><span class="log-${type}">${msg}</span>`;
+  el.prepend(d); if(el.children.length>30) el.removeChild(el.lastChild);
+}
+function renderDots(plan) { document.getElementById('int-dots').innerHTML=plan.map(()=>'<div class="int-dot"></div>').join(''); }
+
+// ── Actions ───────────────────────────────────────────────────────────────────
+function scan()                  { send({action:'scan'}); }
+function scanHR()                { send({action:'scan_hr'}); log('Scanning for HR monitors…'); }
+function scanPM()                { send({action:'scan_pm'}); log('Scanning for power meters…'); }
+function connectDev(a,n)         { send({action:'connect',address:a,name:n}); }
+function connectHRDev(a,n)       { send({action:'connect_hr',address:a,name:n}); }
+function connectPMDev(a,n)       { send({action:'connect_pm',address:a,name:n}); }
+function disconnect()            { send({action:'disconnect'}); }
+function disconnectHR()          { send({action:'disconnect_hr'}); }
+function disconnectPM()          { send({action:'disconnect_pm'}); }
+function togglePMSource(on)      { send({action:'set_use_pm',enabled:on}); }
+function setPower()              { send({action:'set_power',watts:parseInt(document.getElementById('pw-sl').value)}); }
+
+function startIntervals() {
+  const plan=intSteps.map(s=>({watts:s.watts,duration:s.duration,reps:s.reps,grade:s.grade,label:`${s.watts}W${s.grade!==null?` @${s.grade}%`:''}`}));
+  if(!plan.length){log('Add at least one step','err');return;}
+  const name=document.getElementById('ride-name-prefix')?.value?.trim()||'';
+  send({action:'start_intervals', plan, name});
+  document.getElementById('btn-sint').disabled=true;
+}
+function stopIntervals() {
+  const name=document.getElementById('ride-name-prefix')?.value?.trim()||'';
+  send({action:'stop_intervals', auto_upload:autoUploadPref, name});
+}
+
+// ── Quick interval rows ───────────────────────────────────────────────────────
+function renderIntRows() {
+  document.getElementById('int-rows').innerHTML=intSteps.map(s=>`
+    <div class="int-row">
+      <input class="int-cell" type="number" value="${s.watts}"    min="0"   max="600"  placeholder="W"   onchange="upStep(${s.id},'watts',+this.value)">
+      <input class="int-cell" type="number" value="${s.duration}" min="5"   max="3600" placeholder="s"   onchange="upStep(${s.id},'duration',+this.value)">
+      <input class="int-cell" type="number" value="${s.reps}"     min="1"   max="20"   placeholder="×"   onchange="upStep(${s.id},'reps',+this.value)">
+      <input class="int-cell" type="number" value="${s.grade===null?'':s.grade}" min="-10" max="24" step="0.5" placeholder="—" title="Grade % (ANT+ required)" onchange="upStep(${s.id},'grade',this.value===''?null:+this.value)">
+      <button class="int-del" onclick="rmStep(${s.id})">✕</button>
+    </div>`).join('');
+}
+function addIntRow()  { intSteps.push({id:++nextId,watts:150,duration:60,reps:1,grade:null}); renderIntRows(); }
+function rmStep(id)   { intSteps=intSteps.filter(s=>s.id!==id); renderIntRows(); }
+function upStep(id,f,v){ const s=intSteps.find(s=>s.id===id); if(s) s[f]=v; }
+renderIntRows();
+
+function loadPlanToRide() {
+  const names=Object.keys(savedPlans);
+  if(!names.length){log('No saved plans','err');return;}
+  const name=prompt(`Load plan:\n${names.join('\n')}`);
+  if(!name||!savedPlans[name]){return;}
+  intSteps=savedPlans[name].steps.map(s=>({id:++nextId,...s}));
+  renderIntRows(); switchTab('ride'); log(`Loaded: ${name}`,'ok');
+}
+
+// ── Plans ─────────────────────────────────────────────────────────────────────
+let savedPlans={}, currentPlanName=null, editorSteps=[];
+
+async function loadPlansFromServer() {
+  try { const r=await fetch('/plans'); savedPlans=await r.json(); renderPlanList(); } catch(e){}
+}
+loadPlansFromServer();
+
+function renderPlanList() {
+  const el=document.getElementById('plan-list'), names=Object.keys(savedPlans);
+  el.innerHTML=names.length
+    ? names.map(n=>`<div class="plan-item${currentPlanName===n?' selected':''}" onclick="openPlan('${n}')"><div class="pname">${n}</div><div class="pmeta">${savedPlans[n].steps?.length||0} steps · ${planDur(savedPlans[n])} min</div></div>`).join('')
+    : '<div style="font-size:11px;color:var(--muted)">No saved plans yet</div>';
+}
+function planDur(p) { return Math.round((p.steps||[]).reduce((a,s)=>a+s.duration*(s.reps||1),0)/60); }
+function newPlan() { currentPlanName=null; editorSteps=[{watts:150,duration:180,reps:1,label:''}]; renderEditor('New Plan'); }
+function openPlan(name) { currentPlanName=name; editorSteps=JSON.parse(JSON.stringify(savedPlans[name].steps||[])); renderEditor(name); renderPlanList(); }
+
+function renderEditor(name) {
+  document.getElementById('plan-editor').innerHTML=`
+    <h2>Plan Builder</h2>
+    <div class="field-row"><label>Plan Name</label><input class="field-input" id="pe-name" value="${name==='New Plan'?'':name}" placeholder="e.g. Sweet Spot 45min"></div>
+    <table class="step-table"><thead><tr><th>Label</th><th>Watts</th><th>Duration (s)</th><th>Reps</th><th>Grade %</th><th></th></tr></thead><tbody id="pe-steps"></tbody></table>
+    <div class="btn-row"><button class="btn-sm" onclick="peAdd()">+ Add Step</button><button class="btn-sm" onclick="peDup()">Duplicate Last</button></div>
+    <div class="plan-preview"><div class="preview-bars" id="pe-bars"></div></div>
+    <div class="btn-row">
+      <button class="btn-sm primary" onclick="savePlan()">Save Plan</button>
+      <button class="btn-sm orange"  onclick="loadEditorToRide()">Load → Ride</button>
+      ${currentPlanName?`<button class="btn-sm danger" onclick="deletePlan()">Delete</button>`:''}
+    </div>`;
+  renderEditorSteps();
+}
+function renderEditorSteps() {
+  document.getElementById('pe-steps').innerHTML=editorSteps.map((s,i)=>`
+    <tr>
+      <td><input value="${s.label||''}" placeholder="e.g. Warm-up" onchange="upES(${i},'label',this.value)"></td>
+      <td><input type="number" value="${s.watts}"    min="0"   max="600"  onchange="upES(${i},'watts',+this.value)"></td>
+      <td><input type="number" value="${s.duration}" min="5"   max="7200" onchange="upES(${i},'duration',+this.value)"></td>
+      <td><input type="number" value="${s.reps||1}"  min="1"   max="20"   onchange="upES(${i},'reps',+this.value)"></td>
+      <td><input type="number" value="${s.grade===null||s.grade===undefined?'':s.grade}" min="-10" max="24" step="0.5" placeholder="—" title="Grade % via ANT+" onchange="upES(${i},'grade',this.value===''?null:+this.value)"></td>
+      <td><button class="del-btn" onclick="rmES(${i})">✕</button></td>
+    </tr>`).join('');
+  renderPreview();
+}
+function upES(i,f,v){ editorSteps[i][f]=v; renderPreview(); }
+function rmES(i){ editorSteps.splice(i,1); renderEditorSteps(); }
+function peAdd(){ editorSteps.push({watts:200,duration:180,reps:1,grade:null,label:''}); renderEditorSteps(); }
+function peDup(){ if(editorSteps.length){editorSteps.push({...editorSteps[editorSteps.length-1]}); renderEditorSteps();} }
+function renderPreview() {
+  const bars=document.getElementById('pe-bars'); if(!bars) return;
+  const maxW=Math.max(1,...editorSteps.map(s=>s.watts));
+  bars.innerHTML=editorSteps.map(s=>`<div class="preview-bar" style="height:${Math.round((s.watts/maxW)*62)+8}px;width:${Math.max(10,Math.round(s.duration*(s.reps||1)/10))}px" title="${s.label||s.watts+'W'} · ${s.duration}s×${s.reps||1}"></div>`).join('');
+}
+async function savePlan() {
+  const name=(document.getElementById('pe-name').value||'').trim();
+  if(!name){alert('Enter a plan name');return;}
+  await fetch(`/plans/${encodeURIComponent(name)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({steps:editorSteps})});
+  savedPlans[name]={steps:editorSteps}; currentPlanName=name; renderPlanList(); log(`Plan saved: ${name}`,'ok');
+}
+async function deletePlan() {
+  if(!currentPlanName||!confirm(`Delete "${currentPlanName}"?`)) return;
+  await fetch(`/plans/${encodeURIComponent(currentPlanName)}`,{method:'DELETE'});
+  delete savedPlans[currentPlanName]; currentPlanName=null; renderPlanList();
+  document.getElementById('plan-editor').innerHTML='<div style="color:var(--muted);font-size:14px;margin-top:40px;text-align:center">Select a plan or create a new one</div>';
+}
+function loadEditorToRide() { intSteps=editorSteps.map(s=>({id:++nextId,...s,grade:s.grade??null})); renderIntRows(); switchTab('ride'); }
+
+// ── Strava ────────────────────────────────────────────────────────────────────
+async function checkStravaStatus() {
+  try {
+    const d=await (await fetch('/strava/status')).json();
+    document.getElementById('s-cfg-dot').className='s-dot '+(d.configured?'ok':'warn');
+    document.getElementById('s-cfg-txt').textContent=d.configured?'strava_config.json configured':'Needs client_id/secret in strava_config.json';
+    document.getElementById('s-auth-dot').className='s-dot '+(d.authed?'ok':'');
+    document.getElementById('s-auth-txt').textContent=d.authed?`Authenticated as ${d.athlete}`:'Not authenticated';
+    document.getElementById('btn-strava-auth').textContent=d.authed?'Re-connect Strava Account':'Connect Strava Account';
+  } catch(e){}
+}
+checkStravaStatus();
+function stravaAuth() { window.open('/strava/auth','_blank','width=600,height=700'); }
+
+async function uploadStrava() {
+  const res=document.getElementById('upload-result');
+  res.style.display='block'; res.className='upload-result'; res.textContent='Uploading to Strava…';
+  const name=document.getElementById('upload-name').value.trim();
+  try {
+    const d=await (await fetch('/upload/strava',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({history:rideHistory,session_start:rideSessionStart,name:name||undefined})})).json();
+    res.className='upload-result '+(d.ok?'ok':'err');
+    res.textContent=d.ok?`✓ Uploaded to Strava! ID: ${d.upload_id} · ${d.status}`:`✗ ${d.error}`;
+  } catch(e){res.className='upload-result err';res.textContent=`✗ ${e.message}`;}
+}
+
+// ── Garmin ────────────────────────────────────────────────────────────────────
+async function checkGarminStatus() {
+  try {
+    const d=await (await fetch('/garmin/status')).json();
+    document.getElementById('g-auth-dot').className='s-dot '+(d.authed?'ok':'');
+    document.getElementById('g-auth-txt').textContent=d.authed?`Logged in${d.athlete?' as '+d.athlete:''}`:'Not logged in';
+    document.getElementById('garmin-login-form').style.display=d.authed?'none':'flex';
+    document.getElementById('garmin-logout-form').style.display=d.authed?'block':'none';
+  } catch(e){}
+}
+checkGarminStatus();
+
+async function garminLogin() {
+  const email=document.getElementById('g-email').value.trim();
+  const pass=document.getElementById('g-password').value;
+  const st=document.getElementById('garmin-login-status');
+  if(!email||!pass){st.textContent='Email and password required';st.style.color='var(--red)';return;}
+  st.style.color='var(--muted)'; st.textContent='Logging in…';
+  try {
+    const d=await (await fetch('/garmin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password:pass})})).json();
+    if(d.ok){
+      document.getElementById('g-password').value='';
+      st.textContent=''; checkGarminStatus();
+    } else {
+      st.style.color='var(--red)'; st.textContent=`✗ ${d.error}`;
+    }
+  } catch(e){st.style.color='var(--red)';st.textContent=`✗ ${e.message}`;}
+}
+
+async function garminLogout() {
+  await fetch('/garmin/logout',{method:'POST'});
+  checkGarminStatus();
+}
+
+async function uploadGarmin() {
+  const res=document.getElementById('garmin-upload-result');
+  res.style.display='block'; res.className='upload-result'; res.textContent='Uploading to Garmin Connect…';
+  const name=document.getElementById('garmin-upload-name').value.trim();
+  try {
+    const d=await (await fetch('/upload/garmin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({history:rideHistory,session_start:rideSessionStart,name:name||undefined})})).json();
+    res.className='upload-result '+(d.ok?'ok':'err');
+    res.textContent=d.ok?`✓ Uploaded to Garmin! ID: ${d.upload_id}`:`✗ ${d.error}`;
+  } catch(e){res.className='upload-result err';res.textContent=`✗ ${e.message}`;}
+}
+
+async function uploadFakeRide(target) {
+  const res=document.getElementById('fake-result');
+  res.style.display='block'; res.className='upload-result'; res.textContent=`Generating and uploading to ${target==='garmin'?'Garmin':'Strava'}…`;
+  const duration=parseInt(document.getElementById('fake-duration').value)||30;
+  const ftp=parseInt(document.getElementById('fake-ftp').value)||220;
+  const name=document.getElementById('fake-name').value.trim();
+  const url=target==='garmin'?'/upload/garmin/fake':'/upload/strava/fake';
+  try {
+    const d=await (await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({duration:duration*60,ftp,name:name||undefined})})).json();
+    res.className='upload-result '+(d.ok?'ok':'err');
+    res.textContent=d.ok?`✓ Fake ride uploaded to ${target==='garmin'?'Garmin':'Strava'}! ID: ${d.upload_id}`:`✗ ${d.error}`;
+  } catch(e){res.className='upload-result err';res.textContent=`✗ ${e.message}`;}
+}
+
+async function downloadFit(fake=false) {
+  const duration=parseInt(document.getElementById('fake-duration')?.value)||30;
+  const ftp=parseInt(document.getElementById('fake-ftp')?.value)||220;
+  const body = fake
+    ? {fake:true, duration:duration*60, ftp}
+    : {history:rideHistory, session_start:rideSessionStart};
+  try {
+    const resp = await fetch('/download/fit', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+    if (!resp.ok) { const d=await resp.json(); alert('Download error: '+(d.error||resp.statusText)); return; }
+    const blob  = await resp.blob();
+    const fname = (resp.headers.get('Content-Disposition')||'').match(/filename="([^"]+)"/)?.[1] || 'ride.fit';
+    const url   = URL.createObjectURL(blob);
+    const a     = document.createElement('a');
+    a.href=url; a.download=fname; document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+  } catch(e) { alert('Download failed: '+e.message); }
+}
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach((b,i)=>b.classList.toggle('active',['ride','connect','plans','strava'][i]===name));
+  document.querySelectorAll('.tab-page').forEach(p=>p.classList.toggle('active',p.id===`tab-${name}`));
+  if(name==='strava') { checkStravaStatus(); checkGarminStatus(); loadSettings(); }
+  if(name==='plans')  loadPlansFromServer();
+  if(name==='ride')   { resizeCanvas(); drawChart(); }
+}
+
+function antConnect() {
+  send({action:'ant_connect', device_id: 0});
+  log('Connecting ANT+ dongle…');
+}
+function antDisconnect() { send({action:'ant_disconnect'}); }
+function antScanTrainer() {
+  send({action:'ant_scan_trainer'});
+  log('Scanning for ANT+ trainer…');
+  const b=document.getElementById('btn-ant-trainer-scan');
+  if(b) b.textContent='Scanning…';
+}
+function scanAntHR() {
+  send({action:'scan_ant_hr'});
+  log('Scanning for ANT+ HR monitor…');
+  const b=document.getElementById('btn-ant-hr-scan');
+  if(b) b.textContent='Scanning ANT+ HR…';
+}
+function setSlope() {
+  send({action:'set_slope', grade:parseFloat(document.getElementById('slope-sl').value)});
+}
+
+// ── Session recording ─────────────────────────────────────────────────────────
+function sessionStart() {
+  if(!connected){ log('Connect BLE trainer first','err'); return; }
+  const name = document.getElementById('ride-name-prefix')?.value?.trim() || '';
+  send({action:'session_start', name});
+}
+function sessionStop() {
+  const name = document.getElementById('ride-name-prefix')?.value?.trim() || '';
+  // session_stop handler on server also cancels intervals
+  send({action:'session_stop', auto_upload: autoUploadPref, name});
+}
+function showAutoUploadToast(msg, ok) {
+  // Show a brief overlay notification
+  const d = document.createElement('div');
+  d.style.cssText = `position:fixed;bottom:24px;right:24px;z-index:9999;padding:12px 18px;
+    background:${ok?'rgba(59,255,138,.15)':'rgba(255,59,92,.15)'};
+    border:1px solid ${ok?'var(--green)':'var(--red)'};
+    color:${ok?'var(--green)':'var(--red)'};font-family:'Barlow Condensed';
+    font-size:14px;font-weight:700;letter-spacing:0.08em;border-radius:3px;`;
+  d.textContent = msg;
+  document.body.appendChild(d);
+  setTimeout(()=>d.remove(), 5000);
+}
+
+// ── Settings (auto-upload preference) ────────────────────────────────────────
+async function loadSettings() {
+  try {
+    const d = await (await fetch('/settings')).json();
+    autoUploadPref = d.auto_upload || 'none';
+    const radio = document.getElementById('au-' + autoUploadPref);
+    if(radio) radio.checked = true;
+    const prefix = document.getElementById('ride-name-prefix');
+    if(prefix) prefix.value = d.default_name_template || '';
+  } catch(e){}
+}
+async function saveAutoUpload(val) {
+  if(val) autoUploadPref = val;
+  const prefix = document.getElementById('ride-name-prefix')?.value?.trim() || '';
+  try {
+    await fetch('/settings', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({auto_upload: autoUploadPref, default_name_template: prefix})});
+  } catch(e){}
+}
+loadSettings();
+
+connectWS();
+</script>
+</body>
+</html>

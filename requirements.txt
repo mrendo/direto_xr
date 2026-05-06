@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+bleak>=1.0.0
+websockets
+httpx
+garminconnect
+fit-tool
+openant
