@@ -533,20 +533,24 @@ def parse_cycling_power(data: bytearray) -> dict:
     offset = 2
     result = {}
     # Instantaneous power is always present (sint16 at offset 2)
-    result["power_w"] = struct.unpack_from("<h", data, offset)[0]
+    result["power_w"] = max(0, struct.unpack_from("<h", data, offset)[0])
     offset += 2
     # Bit 4: Wheel Revolution Data present (skip if set)
     if flags & 0x0010: offset += 6
-    # Bit 5: Crank Revolution Data present — gives cadence
+    # Bit 5: Crank Revolution Data present — gives cadence via delta
     if flags & 0x0020:
-        crank_revs  = struct.unpack_from("<H", data, offset)[0]
-        crank_time  = struct.unpack_from("<H", data, offset + 2)[0]  # 1/1024 s units
+        crank_revs = struct.unpack_from("<H", data, offset)[0]
+        crank_time = struct.unpack_from("<H", data, offset + 2)[0]  # 1/1024 s units
         offset += 4
-        if hasattr(parse_cycling_power, "_last_crank_revs"):
-            d_revs = (crank_revs - parse_cycling_power._last_crank_revs) & 0xFFFF
-            d_time = (crank_time - parse_cycling_power._last_crank_time) & 0xFFFF
-            if d_time > 0:
-                result["cadence_rpm"] = round(d_revs * 1024 * 60 / d_time, 0)
+        last_r = getattr(parse_cycling_power, "_last_crank_revs", None)
+        last_t = getattr(parse_cycling_power, "_last_crank_time", None)
+        if last_r is not None and last_t is not None:
+            d_revs = (crank_revs - last_r) & 0xFFFF
+            d_time = (crank_time - last_t) & 0xFFFF
+            # d_time in 1/1024 s units — minimum ~0.1s to avoid crazy spikes
+            if d_time >= 102 and d_revs <= 20:  # sanity: max ~200rpm, min 100ms gap
+                cadence = round(d_revs * 1024 * 60 / d_time)
+                result["cadence_rpm"] = min(cadence, 200)  # hard cap at 200rpm
         parse_cycling_power._last_crank_revs = crank_revs
         parse_cycling_power._last_crank_time = crank_time
     return result
@@ -1371,23 +1375,28 @@ async def handle_message(msg: dict):
         await _do_session_stop(auto_upload=auto_upload, ride_name=ride_name)
 
     elif a == "zero_pm":
-        # Send zero offset calibration to power meter via Cycling Power Control Point
-        # Opcode 0x01 = Set Cumulative Value (resets accumulated energy, not offset)
-        # Most meters use proprietary calibration but the standard CPCP zero offset is 0x00
+        # Stages and most BLE power meters require notifications on the Control Point
+        # before accepting write commands (GATT spec requirement for indicated characteristics)
         CYCLING_POWER_CP_UUID = "00002a66-0000-1000-8000-00805f9b34fb"
         if not state.pm_connected or not state.pm_client:
             await broadcast({"type": "error", "msg": "Power meter not connected"})
             return
         try:
+            # Enable notifications on CP (required by Stages before write)
+            try:
+                await state.pm_client.start_notify(CYCLING_POWER_CP_UUID,
+                    lambda s, d: logger.debug(f"[PM] CP response: {d.hex()}"))
+            except Exception:
+                pass  # Some meters don't need this — continue anyway
+            await asyncio.sleep(0.3)
+            # Opcode 0x00 = request zero offset (manual calibration start)
             await state.pm_client.write_gatt_char(
-                CYCLING_POWER_CP_UUID,
-                bytes([0x00]),   # Request sampling of supported sensor calibration
-                response=True
-            )
-            await broadcast({"type": "log", "msg": "Power meter: zero calibration sent"})
+                CYCLING_POWER_CP_UUID, bytes([0x00]), response=True)
+            await broadcast({"type": "log", "msg": "Power meter: zero calibration sent — unload pedals and wait"})
             logger.info("[PM] Zero calibration command sent")
         except Exception as e:
-            await broadcast({"type": "error", "msg": f"Zero calibration failed: {e}"})
+            # Stages sometimes needs the proprietary app for full calibration
+            await broadcast({"type": "error", "msg": f"Zero cal: {e} — try the Stages app for full calibration"})
             logger.warning(f"[PM] Zero calibration error: {e}")
 
     elif a == "reset_app":
