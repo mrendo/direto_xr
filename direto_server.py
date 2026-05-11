@@ -1143,7 +1143,7 @@ async def handle_message(msg: dict):
 
     if a == "scan":
         await broadcast({"type": "log", "msg": "Scanning for trainer…"})
-        devs = await BleakScanner.discover(timeout=8.0)
+        devs = await BleakScanner.discover(timeout=4.0)
         found = []
         for d in devs:
             if d.name and "direto" in d.name.lower():
@@ -1153,7 +1153,7 @@ async def handle_message(msg: dict):
 
     elif a == "scan_hr":
         await broadcast({"type": "log", "msg": "Scanning for heart rate monitors…"})
-        devs = await BleakScanner.discover(timeout=8.0)
+        devs = await BleakScanner.discover(timeout=4.0)
         hr_keywords = ["heart", "hr ", "polar", "garmin", "wahoo", "tickr", "scosche",
                        "hrm", "chest", "band", "sense", "vantage", "rhythm"]
         found = []
@@ -1178,7 +1178,7 @@ async def handle_message(msg: dict):
 
     elif a == "scan_pm":
         await broadcast({"type": "log", "msg": "Scanning for power meters…"})
-        devs = await BleakScanner.discover(timeout=8.0)
+        devs = await BleakScanner.discover(timeout=4.0)
         pm_keywords = ["power", "stages", "4iiii", "assioma", "favero", "vector",
                        "powertap", "srm", "pioneer", "quarq", "rotor", "infocrank",
                        "xcadey", "sram", "shimano", "bepro", "dfour", "p2m"]
@@ -1369,6 +1369,25 @@ async def handle_message(msg: dict):
         auto_upload = msg.get("auto_upload", "none")
         ride_name   = msg.get("name", "") or state.ride_name or ""
         await _do_session_stop(auto_upload=auto_upload, ride_name=ride_name)
+
+    elif a == "shutdown":
+        logger.info("[SERVER] Shutdown requested — disconnecting and stopping…")
+        await broadcast({"type": "log", "msg": "Shutting down…"})
+        # Disconnect BLE
+        if state.connected and state.client:
+            try: await state.client.disconnect()
+            except: pass
+        if state.hr_connected and state.hr_client:
+            try: await state.hr_client.disconnect()
+            except: pass
+        if state.pm_connected and state.pm_client:
+            try: await state.pm_client.disconnect()
+            except: pass
+        # Disconnect ANT+
+        if state.ant_connected: await ant_disconnect()
+        await asyncio.sleep(0.5)
+        import os, signal
+        os.kill(os.getpid(), signal.SIGTERM)
 
     elif a == "ant_connect":
         device_id = int(msg.get("device_id", 0))

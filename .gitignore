@@ -1,8 +1,10 @@
 venv/
 __pycache__/
 *.pyc
+*.fit
 strava_token.json
 strava_config.json
 plans.json
+settings.json
 garmin_session/
 .DS_Store

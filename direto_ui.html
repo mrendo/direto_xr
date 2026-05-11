@@ -36,7 +36,7 @@
   .tab-page.active { display:grid; }
 
   /* ── RIDE TAB ── */
-  #tab-ride { grid-template-columns:220px 1fr 280px; height:calc(100vh - 98px); }
+  #tab-ride { grid-template-columns:240px 1fr; height:calc(100vh - 98px); }
 
   .panel { padding:15px; border-right:1px solid var(--border); display:flex; flex-direction:column; gap:13px; overflow-y:auto; }
   .panel.right { border-right:none; border-left:1px solid var(--border); }
@@ -75,6 +75,11 @@
   input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:13px; height:13px; background:var(--accent); cursor:pointer; border-radius:0; border:2px solid var(--bg); }
 
   .btn { display:block; width:100%; padding:9px 12px; font-family:'Barlow Condensed'; font-size:13px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; border:1px solid var(--border2); background:var(--panel); color:var(--text); cursor:pointer; transition:all .2s; }
+  .btn:active { opacity:.6; transform:scale(.98); }
+  .nudge-btn { padding:10px 4px; font-size:14px; font-weight:700; font-family:'JetBrains Mono'; border:1px solid var(--border2); background:var(--panel); color:var(--text); cursor:pointer; border-radius:2px; text-align:center; transition:all .15s; width:100%; }
+  .nudge-btn:active { opacity:.6; transform:scale(.97); background:var(--border); }
+  .btn.scanning { border-color:var(--accent3) !important; color:var(--accent3) !important; animation:pulse .8s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
   .btn:hover  { border-color:var(--accent); color:var(--accent); }
   .btn.primary { background:var(--accent); color:#0a0b0d; border-color:var(--accent); }
   .btn.primary:hover { background:#d4e83c; }
@@ -159,6 +164,7 @@
 
   /* ── STRAVA TAB ── */
   #tab-strava { grid-template-columns:1fr; height:calc(100vh - 98px); overflow-y:auto; }
+  #tab-settings { height:calc(100vh - 98px); }
   .strava-page { padding:28px; display:flex; flex-direction:column; gap:20px; max-width:700px; }
   .strava-card { background:var(--panel); border:1px solid var(--border2); padding:18px 22px; display:flex; flex-direction:column; gap:11px; }
   .strava-card h3 { font-size:15px; font-weight:700; letter-spacing:0.06em; }
@@ -278,32 +284,90 @@
   <button class="tab-btn"        onclick="switchTab('connect')">Connect</button>
   <button class="tab-btn"        onclick="switchTab('plans')">Plans</button>
   <button class="tab-btn"        onclick="switchTab('strava')">Upload</button>
+  <button class="tab-btn"        onclick="switchTab('settings')">Settings</button>
 </div>
 
 <!-- ══════════════════════════════════════════════════════ RIDE TAB -->
 <div id="tab-ride" class="tab-page active">
 
-  <!-- LEFT: ERG + Slope controls only -->
-  <div class="panel">
-    <div class="p-title">ERG Mode</div>
-    <div class="ctrl-group">
-      <label>Target Power <span id="pw-disp">150 W</span></label>
-      <input type="range" id="pw-sl" min="0" max="600" value="150" step="5" oninput="document.getElementById('pw-disp').textContent=this.value+' W'">
-    </div>
-    <button class="btn primary" id="btn-pw" onclick="setPower()" disabled>Set ERG Power</button>
+  <!-- LEFT: ERG + Slope + Quick Intervals + bottom bar -->
+  <div class="panel" style="justify-content:space-between">
 
-    <div class="p-title">Slope</div>
-    <div class="ctrl-group">
-      <label>Grade <span id="slope-disp" style="color:#ff9f1c">0.0%</span></label>
-      <input type="range" id="slope-sl" min="-10" max="24" value="0" step="0.5"
-        oninput="document.getElementById('slope-disp').textContent=parseFloat(this.value).toFixed(1)+'%'">
+    <div>
+      <div class="p-title">ERG Mode</div>
+      <div id="erg-disp" style="font-family:'JetBrains Mono';font-size:64px;font-weight:700;color:var(--accent);text-align:center;line-height:1">150</div>
+      <div style="font-size:11px;color:var(--muted);text-align:center;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px">watts</div>
+      <input type="range" id="pw-sl" min="0" max="600" value="150" step="5" style="width:100%"
+        oninput="document.getElementById('erg-disp').textContent=this.value">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:8px">
+        <button class="nudge-btn" onclick="nudgeErg(-25)">−25</button>
+        <button class="nudge-btn" onclick="nudgeErg(-5)">−5</button>
+        <button class="nudge-btn" onclick="nudgeErg(+5)">+5</button>
+        <button class="nudge-btn" onclick="nudgeErg(+25)">+25</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">
+        <button class="btn primary" id="btn-pw" onclick="setPower()" disabled>Set ERG</button>
+        <button class="btn danger" onclick="ergOff()">ERG Off</button>
+      </div>
     </div>
-    <button class="btn" id="btn-slope" onclick="setSlope()" style="border-color:#ff9f1c;color:#ff9f1c;opacity:.4;pointer-events:none" disabled>Set Slope</button>
-    <div style="font-size:10px;color:var(--muted);line-height:1.5">Connect ANT+ trainer in the Connect tab first.</div>
+
+    <div style="height:1px;background:var(--border);margin:4px 0"></div>
+
+    <div>
+      <div class="p-title">Slope</div>
+      <div id="slope-disp-big" style="font-family:'JetBrains Mono';font-size:64px;font-weight:700;color:#ff9f1c;text-align:center;line-height:1">0.0%</div>
+      <div style="font-size:11px;color:var(--muted);text-align:center;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px">gradient</div>
+      <input type="range" id="slope-sl" min="-10" max="24" value="0" step="0.5" style="width:100%"
+        oninput="document.getElementById('slope-disp-big').textContent=parseFloat(this.value).toFixed(1)+'%'">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:8px">
+        <button class="nudge-btn" onclick="nudgeSlope(-5)">−5%</button>
+        <button class="nudge-btn" onclick="nudgeSlope(-1)">−1%</button>
+        <button class="nudge-btn" onclick="nudgeSlope(+1)">+1%</button>
+        <button class="nudge-btn" onclick="nudgeSlope(+5)">+5%</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">
+        <button class="btn" id="btn-slope" onclick="setSlope()" style="border-color:#ff9f1c;color:#ff9f1c;opacity:.4;pointer-events:none" disabled>Set Slope</button>
+        <button class="btn danger" onclick="flatSlope()">Flat 0%</button>
+      </div>
+    </div>
+
+    <div style="height:1px;background:var(--border);margin:4px 0"></div>
+
+    <div>
+      <div class="p-title">Quick Intervals</div>
+      <div class="int-col-heads" style="grid-template-columns:1fr 1fr 44px 44px 16px">
+        <span class="int-ch">W</span><span class="int-ch">Sec</span><span class="int-ch">×</span><span class="int-ch">%</span><span></span>
+      </div>
+      <div class="int-rows" id="int-rows" style="max-height:160px"></div>
+      <div style="display:flex;gap:5px;margin-top:6px">
+        <button class="btn" onclick="addIntRow()" style="flex:1">+ Step</button>
+      </div>
+    </div>
+
+    <!-- Bottom bar pinned -->
+    <div style="border-top:1px solid var(--border);padding-top:10px;display:flex;flex-direction:column;gap:6px;margin-top:auto">
+      <button class="btn" onclick="loadPlanToRide()" style="color:var(--accent3);border-color:var(--accent3)">Load Plan</button>
+      <div style="display:flex;gap:5px">
+        <button id="btn-sint" onclick="startIntervals()" disabled
+          style="flex:1;background:var(--green);color:#0a0b0d;border:none;font-family:'Barlow Condensed';font-size:13px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:11px 10px;cursor:pointer;border-radius:2px;opacity:.4">▶ Start Plan</button>
+        <button id="btn-stopi" onclick="stopIntervals()"
+          style="flex:1;background:var(--red);color:#fff;border:none;font-family:'Barlow Condensed';font-size:13px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:11px 10px;cursor:pointer;border-radius:2px;display:none">■ Stop Plan</button>
+      </div>
+      <div style="display:flex;gap:5px">
+        <button id="btn-rec-start" onclick="sessionStart()"
+          style="flex:1;background:var(--green);color:#0a0b0d;border:none;font-family:'Barlow Condensed';font-size:13px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:11px 10px;cursor:pointer;border-radius:2px;opacity:.4" disabled>
+          ▶ Start Free Ride
+        </button>
+        <button id="btn-rec-stop" onclick="sessionStop()"
+          style="flex:1;background:var(--red);color:#fff;border:none;font-family:'Barlow Condensed';font-size:13px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:11px 10px;cursor:pointer;border-radius:2px;display:none">
+          ■ Stop Free Ride
+        </button>
+      </div>
+    </div>
   </div>
 
-  <!-- CENTRE: 3x3 stat grid + chart + mode bar -->
-  <div style="display:flex;flex-direction:column">
+  <!-- CENTRE: mode bar + stats + progress + chart -->
+  <div style="display:flex;flex-direction:column;grid-column:2/-1">
     <div class="mode-bar">
       <div class="mode-pill free" id="mode-pill">FREE RIDE</div>
     </div>
@@ -327,13 +391,13 @@
       <div class="stat-blk" onclick="toggleSpeedUnit()" style="cursor:pointer;position:relative">
         <div class="stat-lbl">Speed</div>
         <div class="stat-val w" id="sv-speed">0.0</div>
-        <div class="stat-unit" id="sv-speed-unit">km/h</div>
+        <div class="stat-unit" id="sv-speed-unit">mph</div>
         <div style="position:absolute;bottom:5px;right:6px;font-size:9px;letter-spacing:0.05em;color:var(--muted);border:1px solid var(--border2);padding:1px 5px;border-radius:3px">km/h ⇄ mph</div>
       </div>
       <div class="stat-blk" onclick="toggleSpeedUnit()" style="cursor:pointer;position:relative">
         <div class="stat-lbl">Distance</div>
         <div class="stat-val w" id="sv-dist">0.0</div>
-        <div class="stat-unit" id="sv-dist-unit">km</div>
+        <div class="stat-unit" id="sv-dist-unit">mi</div>
         <div style="position:absolute;bottom:5px;right:6px;font-size:9px;letter-spacing:0.05em;color:var(--muted);border:1px solid var(--border2);padding:1px 5px;border-radius:3px">km ⇄ mi</div>
       </div>
       <div class="stat-blk">
@@ -342,55 +406,16 @@
         <div class="stat-unit">elapsed</div>
       </div>
     </div>
-    <div class="chart-wrap" style="flex:1"><canvas id="chart"></canvas></div>
-  </div>
-
-  <!-- RIGHT: intervals + free ride + log -->
-  <div class="panel right">
-    <div class="p-title">Quick Intervals</div>
-    <div class="int-col-heads" style="grid-template-columns:1fr 1fr 44px 44px 16px">
-      <span class="int-ch">W</span><span class="int-ch">Sec</span><span class="int-ch">×</span><span class="int-ch">%</span><span></span>
-    </div>
-    <div class="int-rows" id="int-rows"></div>
-    <div style="display:flex;gap:5px">
-      <button class="btn" onclick="addIntRow()" style="flex:1">+ Step</button>
-      <button class="btn" onclick="loadPlanToRide()" style="flex:1;color:var(--accent3);border-color:var(--accent3)">Load Plan</button>
-    </div>
-    <div style="display:flex;gap:5px">
-      <button id="btn-sint" onclick="startIntervals()" disabled
-        style="flex:1;background:var(--green);color:#0a0b0d;border:none;font-family:'Barlow Condensed';font-size:13px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;padding:9px 10px;cursor:pointer;border-radius:2px;opacity:.4">
-        ▶ Start Plan
-      </button>
-      <button id="btn-stopi" onclick="stopIntervals()"
-        style="flex:1;background:var(--red);color:#fff;border:none;font-family:'Barlow Condensed';font-size:13px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;padding:9px 10px;cursor:pointer;border-radius:2px;display:none">
-        ■ Stop Plan
-      </button>
-    </div>
-    <div id="int-prog" style="display:none;flex-direction:column;gap:6px">
-      <div class="prog-lbl" id="prog-step">Step 1/1</div>
-      <div class="prog-lbl"><strong id="prog-watts">—</strong> W · <strong id="prog-rem">—</strong>s left</div>
+    <!-- Interval progress bar — hidden when not in interval mode -->
+    <div id="int-prog" style="display:none;padding:8px 14px;background:var(--bg2);border-bottom:1px solid var(--border);flex-direction:column;gap:5px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span class="prog-lbl" id="prog-step" style="font-size:11px">Step 1/1</span>
+        <span class="prog-lbl" style="font-size:11px"><strong id="prog-watts">—</strong> W · <strong id="prog-rem">—</strong>s left</span>
+      </div>
       <div class="prog-track"><div class="prog-fill" id="prog-fill" style="width:0%"></div></div>
       <div class="int-dots" id="int-dots"></div>
     </div>
-
-    <div style="height:1px;background:var(--border);margin:4px 0"></div>
-
-    <div class="p-title">Free Ride</div>
-    <div style="display:flex;gap:5px">
-      <button id="btn-rec-start" onclick="sessionStart()"
-        style="flex:1;background:var(--green);color:#0a0b0d;border:none;font-family:'Barlow Condensed';font-size:13px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;padding:9px 10px;cursor:pointer;border-radius:2px;opacity:.4" disabled>
-        ▶ Start Free Ride
-      </button>
-      <button id="btn-rec-stop" onclick="sessionStop()"
-        style="flex:1;background:var(--red);color:#fff;border:none;font-family:'Barlow Condensed';font-size:13px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;padding:9px 10px;cursor:pointer;border-radius:2px;display:none">
-        ■ Stop Free Ride
-      </button>
-    </div>
-
-    <div style="height:1px;background:var(--border);margin:4px 0"></div>
-
-    <div class="p-title">Log</div>
-    <div id="log"></div>
+    <div class="chart-wrap" style="flex:1"><canvas id="chart"></canvas></div>
   </div>
 </div>
 
@@ -464,6 +489,13 @@
       </div>
 
     </div>
+
+    <!-- Connection log -->
+    <div class="strava-card" style="margin-top:4px">
+      <h3>Connection Log</h3>
+      <div id="log-connect" style="font-family:'JetBrains Mono';font-size:11px;color:var(--muted);max-height:140px;overflow-y:auto;line-height:1.6"></div>
+    </div>
+
   </div>
 </div>
 
@@ -731,7 +763,7 @@ setInterval(drawChart,1000); drawChart();
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let connected=false, hrConnected=false, pmConnected=false, usePM=false, elapsedSec=0, timerInt=null;
-let speedUnit='kmh'; // 'kmh' or 'mph'
+let speedUnit='mph'; // 'kmh' or 'mph'
 let recording=false;
 let antConnected=false;
 let autoUploadPref='none';  // loaded from server settings
@@ -767,7 +799,7 @@ function handle(m) {
       break;
     case 'scan_results':    renderDevices(m.devices); break;
     case 'hr_scan_results': renderHRDevices(m.devices); break;
-    case 'pm_scan_results': renderPMDevices(m.devices); break;
+    case 'pm_scan_results': renderPMDevices(m.devices); const pb2=document.getElementById('btn-pm-scan'); if(pb2){pb2.textContent='Scan for Power Meter';pb2.classList.remove('scanning');} break;
     case 'connected':    setConn(m.name); log(`Connected to ${m.name}`,'ok'); break;
     case 'disconnected':
       rideHistory=m.history||[]; rideSessionStart=m.session_start;
@@ -798,7 +830,14 @@ function handle(m) {
       recording=true;
       document.getElementById('btn-rec-start').style.display='none';
       document.getElementById('btn-rec-stop').style.display='inline-block';
+      // Reset all metrics
       totalDistKm=0; updateDistDisplay();
+      lastSpeedKmh=0; updateSpeedDisplay();
+      document.getElementById('sv-power').textContent='0';
+      document.getElementById('sv-hr').textContent='—';
+      document.getElementById('sv-cad').textContent='0';
+      document.getElementById('sv-target').textContent='—';
+      chartData=[]; drawChart();
       startTimer();
       log('Recording started','ok');
       break;
@@ -891,11 +930,12 @@ function handle(m) {
       if(m.history){
         chartData=m.history; drawChart();
         // Recalculate total distance from history (speed km/h * interval in hours)
+        // Speed is clamped to 0 so distance never decreases
         if(m.history.length>1){
           totalDistKm=0;
           for(let i=1;i<m.history.length;i++){
-            const dt=(m.history[i].t - m.history[i-1].t)/3600; // hours
-            const avgSpd=(m.history[i].speed + m.history[i-1].speed)/2;
+            const dt=(m.history[i].t - m.history[i-1].t)/3600;
+            const avgSpd=Math.max(0,(m.history[i].speed + m.history[i-1].speed)/2);
             totalDistKm += avgSpd * dt;
           }
           updateDistDisplay();
@@ -1069,40 +1109,65 @@ function updateMode(mode,tp) {
   if(tp!==undefined) document.getElementById('sv-target').textContent=tp||'—';
 }
 function renderDevices(devs) {
-  const el=document.getElementById('device-list');
-  el.innerHTML=devs.length
-    ? devs.map(d=>`<div class="device-item" onclick="connectDev('${d.address}','${d.name}')"><div><div class="dname">${d.name}</div><div class="daddr">${d.address}</div></div><span style="color:var(--accent)">›</span></div>`).join('')
-    : '<div style="font-size:11px;color:var(--muted)">No trainers found</div>';
+  const el=document.getElementById('device-list'); if(!el) return;
+  el.innerHTML='';
+  if(!devs||!devs.length){ el.innerHTML='<div style="font-size:11px;color:var(--muted)">No trainers found</div>'; return; }
+  devs.forEach(d=>{
+    const div=document.createElement('div'); div.className='device-item';
+    div.innerHTML=`<div><div class="dname">${d.name}</div><div class="daddr">${d.address}</div></div><span style="color:var(--accent)">›</span>`;
+    div.addEventListener('click',()=>connectDev(d.address,d.name));
+    el.appendChild(div);
+  });
 }
 function renderHRDevices(devs) {
-  const el=document.getElementById('hr-device-list');
-  el.innerHTML=devs.length
-    ? devs.map(d=>`<div class="device-item hr-item" onclick="connectHRDev('${d.address}','${d.name}')"><div><div class="dname">${d.name}</div><div class="daddr">${d.address}</div></div><span style="color:var(--accent4)">›</span></div>`).join('')
-    : '<div style="font-size:11px;color:var(--muted)">No HR monitors found</div>';
+  const el=document.getElementById('hr-device-list'); if(!el) return;
+  el.innerHTML='';
+  if(!devs||!devs.length){ el.innerHTML='<div style="font-size:11px;color:var(--muted)">No HR monitors found</div>'; return; }
+  devs.forEach(d=>{
+    const div=document.createElement('div'); div.className='device-item hr-item';
+    div.innerHTML=`<div><div class="dname">${d.name}</div><div class="daddr">${d.address}</div></div><span style="color:var(--accent4)">›</span>`;
+    div.addEventListener('click',()=>connectHRDev(d.address,d.name));
+    el.appendChild(div);
+  });
 }
 function renderPMDevices(devs) {
-  const el=document.getElementById('pm-device-list');
-  el.innerHTML=devs.length
-    ? devs.map(d=>`<div class="device-item" style="border-color:var(--border2)" onclick="connectPMDev('${d.address}','${d.name}')"><div><div class="dname">${d.name}</div><div class="daddr">${d.address}</div></div><span style="color:var(--accent2)">›</span></div>`).join('')
-    : '<div style="font-size:11px;color:var(--muted)">No power meters found</div>';
+  const el=document.getElementById('pm-device-list'); if(!el) return;
+  el.innerHTML='';
+  if(!devs||!devs.length){ el.innerHTML='<div style="font-size:11px;color:var(--muted)">No power meters found</div>'; return; }
+  devs.forEach(d=>{
+    const div=document.createElement('div'); div.className='device-item';
+    div.style.borderColor='var(--border2)';
+    div.innerHTML=`<div><div class="dname">${d.name}</div><div class="daddr">${d.address}</div></div><span style="color:var(--accent2)">›</span>`;
+    div.addEventListener('click',()=>connectPMDev(d.address,d.name));
+    el.appendChild(div);
+  });
 }
 function startTimer() {
   elapsedSec=0; clearInterval(timerInt);
   timerInt=setInterval(()=>{ elapsedSec++; const h=Math.floor(elapsedSec/3600),m=Math.floor((elapsedSec%3600)/60),s=elapsedSec%60; document.getElementById('elapsed').textContent=`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`; },1000);
 }
 function log(msg,type='muted') {
-  const el=document.getElementById('log');
   const ts=new Date().toTimeString().slice(0,8);
-  const d=document.createElement('div'); d.className='log-e';
-  d.innerHTML=`<span class="log-ts">${ts}</span><span class="log-${type}">${msg}</span>`;
-  el.prepend(d); if(el.children.length>30) el.removeChild(el.lastChild);
+  const html=`<div class="log-e"><span class="log-ts">${ts}</span><span class="log-${type}">${msg}</span></div>`;
+  // Main ride log — all messages
+  const mainLog=document.getElementById('log');
+  if(mainLog){ mainLog.insertAdjacentHTML('afterbegin',html); if(mainLog.children.length>50) mainLog.removeChild(mainLog.lastChild); }
+  // Settings log — all messages
+  const settLog=document.getElementById('log-settings');
+  if(settLog){ settLog.insertAdjacentHTML('afterbegin',html); if(settLog.children.length>100) settLog.removeChild(settLog.lastChild); }
+  // Connect log — connection events only
+  const connKeywords=['connect','disconnect','scan','found','ANT+','BLE','HR','dongle','trainer','power meter','error'];
+  if(connKeywords.some(k=>msg.toLowerCase().includes(k.toLowerCase()))){
+    const connLog=document.getElementById('log-connect');
+    if(connLog){ connLog.insertAdjacentHTML('afterbegin',html); if(connLog.children.length>50) connLog.removeChild(connLog.lastChild); }
+  }
 }
 function renderDots(plan) { document.getElementById('int-dots').innerHTML=plan.map(()=>'<div class="int-dot"></div>').join(''); }
 
 // ── Actions ───────────────────────────────────────────────────────────────────
-function scan()                  { send({action:'scan'}); }
-function scanHR()                { send({action:'scan_hr'}); log('Scanning for HR monitors…'); }
-function scanPM()                { send({action:'scan_pm'}); log('Scanning for power meters…'); }
+function scan() { send({action:'scan'}); const b=document.getElementById('btn-scan'); if(b){b.textContent='Scanning…';b.classList.add('scanning');} }
+function scanHR() { send({action:'scan_hr'}); log('Scanning for HR monitors…'); const b=document.getElementById('btn-hr-scan'); if(b){b.textContent='Scanning…';b.classList.add('scanning');} }
+function scanPM() { send({action:'scan_pm'}); log('Scanning for power meters…'); const b=document.getElementById('btn-pm-scan'); if(b){b.textContent='Scanning…';b.classList.add('scanning');} }
 function connectDev(a,n)         { send({action:'connect',address:a,name:n}); }
 function connectHRDev(a,n)       { send({action:'connect_hr',address:a,name:n}); }
 function connectPMDev(a,n)       { send({action:'connect_pm',address:a,name:n}); }
@@ -1126,7 +1191,7 @@ function stopIntervals() {
 
 // ── Quick interval rows ───────────────────────────────────────────────────────
 function renderIntRows() {
-  document.getElementById('int-rows').innerHTML=intSteps.map(s=>`
+  const html=intSteps.map(s=>`
     <div class="int-row">
       <input class="int-cell" type="number" value="${s.watts}"    min="0"   max="600"  placeholder="W"   onchange="upStep(${s.id},'watts',+this.value)">
       <input class="int-cell" type="number" value="${s.duration}" min="5"   max="3600" placeholder="s"   onchange="upStep(${s.id},'duration',+this.value)">
@@ -1134,19 +1199,25 @@ function renderIntRows() {
       <input class="int-cell" type="number" value="${s.grade===null?'':s.grade}" min="-10" max="24" step="0.5" placeholder="—" title="Grade % (ANT+ required)" onchange="upStep(${s.id},'grade',this.value===''?null:+this.value)">
       <button class="int-del" onclick="rmStep(${s.id})">✕</button>
     </div>`).join('');
+  const el=document.getElementById('int-rows'); if(el) el.innerHTML=html;
 }
 function addIntRow()  { intSteps.push({id:++nextId,watts:150,duration:60,reps:1,grade:null}); renderIntRows(); }
 function rmStep(id)   { intSteps=intSteps.filter(s=>s.id!==id); renderIntRows(); }
 function upStep(id,f,v){ const s=intSteps.find(s=>s.id===id); if(s) s[f]=v; }
 renderIntRows();
+updateSpeedDisplay();
 
 function loadPlanToRide() {
   const names=Object.keys(savedPlans);
-  if(!names.length){log('No saved plans','err');return;}
-  const name=prompt(`Load plan:\n${names.join('\n')}`);
-  if(!name||!savedPlans[name]){return;}
-  intSteps=savedPlans[name].steps.map(s=>({id:++nextId,...s}));
-  renderIntRows(); switchTab('ride'); log(`Loaded: ${name}`,'ok');
+  if(!names.length){ log('No saved plans — create one in the Plans tab first','err'); return; }
+  const choice = names.length===1
+    ? names[0]
+    : prompt('Load which plan?\n'+names.map((n,i)=>`${i+1}. ${n}`).join('\n')+'\n\nEnter name or number:');
+  if(!choice) return;
+  const name = savedPlans[choice] ? choice : names[parseInt(choice)-1];
+  if(!name||!savedPlans[name]){ log('Plan not found','err'); return; }
+  intSteps=savedPlans[name].steps.map(s=>({id:++nextId,...s,grade:s.grade??null}));
+  renderIntRows(); log(`Loaded plan: ${name}`,'ok');
 }
 
 // ── Plans ─────────────────────────────────────────────────────────────────────
@@ -1324,16 +1395,46 @@ async function downloadFit(fake=false) {
 
 // ── Tab switching ─────────────────────────────────────────────────────────────
 function switchTab(name) {
-  document.querySelectorAll('.tab-btn').forEach((b,i)=>b.classList.toggle('active',['ride','connect','plans','strava'][i]===name));
+  document.querySelectorAll('.tab-btn').forEach(b=>{
+    const t=b.getAttribute('onclick').match(/switchTab\('(\w+)'/);
+    if(t) b.classList.toggle('active', t[1]===name);
+  });
   document.querySelectorAll('.tab-page').forEach(p=>p.classList.toggle('active',p.id===`tab-${name}`));
-  if(name==='strava') { checkStravaStatus(); checkGarminStatus(); loadSettings(); }
-  if(name==='plans')  loadPlansFromServer();
-  if(name==='ride')   { resizeCanvas(); drawChart(); }
+  if(name==='strava')   { checkStravaStatus(); checkGarminStatus(); loadSettings(); }
+  if(name==='plans')    loadPlansFromServer();
+  if(name==='ride')     { resizeCanvas(); drawChart(); }
 }
 
+function nudgeErg(d) {
+  const sl=document.getElementById('pw-sl');
+  const v=Math.max(0,Math.min(600,parseInt(sl.value)+d));
+  sl.value=v; document.getElementById('erg-disp').textContent=v;
+}
+function nudgeSlope(d) {
+  const sl=document.getElementById('slope-sl');
+  const v=Math.max(-10,Math.min(24,parseFloat(sl.value)+d));
+  sl.value=v.toFixed(1);
+  document.getElementById('slope-disp-big').textContent=v.toFixed(1)+'%';
+}
+function ergOff() {
+  document.getElementById('pw-sl').value=0;
+  document.getElementById('erg-disp').textContent='0';
+  setPower();
+}
+function flatSlope() {
+  document.getElementById('slope-sl').value=0;
+  document.getElementById('slope-disp-big').textContent='0.0%';
+  setSlope();
+}
+function shutDown() {
+  if(!confirm('Disconnect all devices and stop the server?')) return;
+  send({action:'shutdown'});
+  setTimeout(()=>document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:monospace;color:#666;font-size:14px">Server stopped. You can close this tab.</div>',1000);
+}
 function antConnect() {
   send({action:'ant_connect', device_id: 0});
   log('Connecting ANT+ dongle…');
+  const b=document.getElementById('btn-ant-connect'); if(b){b.textContent='Connecting…';b.classList.add('scanning');}
 }
 function antDisconnect() { send({action:'ant_disconnect'}); }
 function antScanTrainer() {
@@ -1399,5 +1500,26 @@ loadSettings();
 
 connectWS();
 </script>
+
+<!-- ══════════════════════════════════════════════════════ SETTINGS TAB -->
+<div id="tab-settings" class="tab-page" style="overflow-y:auto;padding:20px">
+  <div style="display:flex;flex-direction:column;gap:16px;height:100%">
+    <div class="strava-card">
+      <h3>Application</h3>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:2px">
+        <div>
+          <div style="font-size:14px;font-weight:700;color:var(--text);letter-spacing:0.05em">Shut Down</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px">Disconnect all devices and stop the server</div>
+        </div>
+        <button onclick="shutDown()" style="padding:10px 22px;font-size:13px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;border:1px solid var(--red);color:var(--red);background:none;cursor:pointer;border-radius:2px;font-family:'Barlow Condensed';white-space:nowrap">⏻ Shut Down</button>
+      </div>
+    </div>
+    <div class="strava-card" style="flex:1;display:flex;flex-direction:column">
+      <h3>Log</h3>
+      <div id="log-settings" style="font-family:'JetBrains Mono';font-size:11px;color:var(--muted);flex:1;overflow-y:auto;line-height:1.8;margin-top:6px"></div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
