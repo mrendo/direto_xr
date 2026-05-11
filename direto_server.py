@@ -566,10 +566,10 @@ async def pm_notify_handler(_sender, data: bytearray):
 
 async def connect_power_meter(device, name: str):
     try:
-        state.pm_client = BleakClient(device)  # device = BLEDevice or address string
+        state.pm_client = BleakClient(device)
         await state.pm_client.connect()
         state.pm_connected = True
-        state.pm_address   = address
+        state.pm_address   = device if isinstance(device, str) else getattr(device, 'address', str(device))
         state.pm_name      = name
         await state.pm_client.start_notify(CYCLING_POWER_UUID, pm_notify_handler)
         await broadcast({"type": "pm_connected", "name": name})
@@ -1369,6 +1369,48 @@ async def handle_message(msg: dict):
         auto_upload = msg.get("auto_upload", "none")
         ride_name   = msg.get("name", "") or state.ride_name or ""
         await _do_session_stop(auto_upload=auto_upload, ride_name=ride_name)
+
+    elif a == "zero_pm":
+        # Send zero offset calibration to power meter via Cycling Power Control Point
+        # Opcode 0x01 = Set Cumulative Value (resets accumulated energy, not offset)
+        # Most meters use proprietary calibration but the standard CPCP zero offset is 0x00
+        CYCLING_POWER_CP_UUID = "00002a66-0000-1000-8000-00805f9b34fb"
+        if not state.pm_connected or not state.pm_client:
+            await broadcast({"type": "error", "msg": "Power meter not connected"})
+            return
+        try:
+            await state.pm_client.write_gatt_char(
+                CYCLING_POWER_CP_UUID,
+                bytes([0x00]),   # Request sampling of supported sensor calibration
+                response=True
+            )
+            await broadcast({"type": "log", "msg": "Power meter: zero calibration sent"})
+            logger.info("[PM] Zero calibration command sent")
+        except Exception as e:
+            await broadcast({"type": "error", "msg": f"Zero calibration failed: {e}"})
+            logger.warning(f"[PM] Zero calibration error: {e}")
+
+    elif a == "reset_app":
+        """Disconnect all devices and reset state without stopping the server."""
+        logger.info("[RESET] Resetting all connections…")
+        if state.recording: await _do_session_stop()
+        if state.connected and state.client:
+            try: await state.client.disconnect()
+            except: pass
+        if state.hr_connected and state.hr_client:
+            try: await state.hr_client.disconnect()
+            except: pass
+        if state.pm_connected and state.pm_client:
+            try: await state.pm_client.disconnect()
+            except: pass
+        if state.ant_connected: await ant_disconnect()
+        # Reset state
+        state.connected = False; state.client = None; state.name = ""
+        state.hr_connected = False; state.hr_client = None
+        state.pm_connected = False; state.pm_client = None
+        state.ant_device_id = 0
+        await broadcast({"type": "reset"})
+        await broadcast({"type": "log", "msg": "App reset — all devices disconnected"})
 
     elif a == "shutdown":
         logger.info("[SERVER] Shutdown requested — disconnecting and stopping…")
