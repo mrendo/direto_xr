@@ -788,25 +788,36 @@ function handle(m) {
     case 'status':
       if(m.connected) setConn(m.name);
       else if(localStorage.getItem('last_trainer_addr')) {
-        // Auto-reconnect to last known trainer after 1s
         const la=localStorage.getItem('last_trainer_addr');
         const ln=localStorage.getItem('last_trainer_name')||la;
         if(la && !connected) setTimeout(()=>{ log('Auto-reconnecting to '+ln+'…'); send({action:'connect',address:la,name:ln}); },1200);
       }
+      if(m.hr_connected) setHRConn(m.hr_name);
+      if(m.pm_connected) { setPMConn(m.pm_name); if(m.use_pm){usePM=true;const pmt=document.getElementById('pm-use-toggle');if(pmt)pmt.checked=true;updatePMSourceLabel();} }
       if(m.ant_connected) {
         antConnected=true;
         document.getElementById('ant-dot').className='conn-dot ant';
         document.getElementById('ant-text').textContent='ANT+ Dongle';
-        const ahb=document.getElementById('btn-ant-hr-scan');
-        if(ahb) ahb.style.display='block';
+        document.getElementById('ant-device-info').style.display='block';
+        document.getElementById('btn-ant-connect').style.display='none';
+        const ahb=document.getElementById('btn-ant-hr-scan'); if(ahb) ahb.style.display='block';
+        const atb=document.getElementById('btn-ant-trainer-scan');
+        if(atb){ atb.disabled=false; atb.style.opacity='1'; atb.style.pointerEvents='auto'; }
       }
-      if(m.ant_available===false) {
-        const b=document.getElementById('btn-ant-connect');
-        if(b){ b.title='openant not installed'; b.style.opacity='.4'; }
+      if(m.ant_trainer_connected && m.ant_device_id) {
+        document.getElementById('ant-trainer-status-dot').className='conn-dot ant';
+        document.getElementById('ant-trainer-status-text').textContent='ANT+ #'+m.ant_device_id;
+        const atd=document.getElementById('ant-trainer-dot-c'); if(atd) atd.className='conn-dot ant';
+        const att=document.getElementById('ant-trainer-text-c'); if(att) att.textContent='ANT+ Trainer #'+m.ant_device_id;
+        const slb=document.getElementById('btn-slope'); if(slb){ slb.disabled=false; slb.style.opacity='1'; slb.style.pointerEvents='auto'; }
       }
-      if(m.hr_connected) setHRConn(m.hr_name);
-      if(m.pm_connected) { setPMConn(m.pm_name); if(m.use_pm){usePM=true;document.getElementById('pm-use-toggle').checked=true;updatePMSourceLabel();} }
-      updateMode(m.mode,m.target_power);
+      if(m.ant_available===false) { const b=document.getElementById('btn-ant-connect'); if(b){b.title='openant not installed';b.style.opacity='.4';} }
+      if(m.recording) {
+        recording=true;
+        document.getElementById('btn-rec-start').style.display='none';
+        document.getElementById('btn-rec-stop').style.display='inline-block';
+      }
+      updateMode(m.mode, m.target_power);
       break;
     case 'scan_results':    renderDevices(m.devices); break;
     case 'hr_scan_results': renderHRDevices(m.devices); break;

@@ -1126,17 +1126,51 @@ async def download_fit(request: Request):
     )
 
 # WebSocket
+@app.get("/state")
+async def get_state():
+    """Full current state snapshot — used by new clients to restore UI on connect."""
+    return JSONResponse({
+        "connected":      state.connected,
+        "name":           state.name,
+        "mode":           state.mode,
+        "target_power":   state.target_power,
+        "hr_connected":   state.hr_connected,
+        "hr_name":        state.hr_name,
+        "pm_connected":   state.pm_connected,
+        "pm_name":        state.pm_name,
+        "use_pm":         state.use_pm,
+        "ant_connected":  state.ant_connected,
+        "ant_device_id":  state.ant_device_id,
+        "ant_trainer_connected": state.ant_device_id > 0,
+        "ant_available":  ANT_AVAILABLE,
+        "recording":      state.recording,
+        "latest":         state.latest,
+        "history_len":    len(state.history),
+    })
+
 @app.websocket("/ws")
 async def ws_ep(ws: WebSocket):
     await ws.accept(); clients.append(ws)
+    # Send full state snapshot so any client (phone, second browser) gets current picture
     await ws.send_text(json.dumps({
-        "type": "status", "connected": state.connected, "name": state.name,
+        "type": "status",
+        "connected": state.connected, "name": state.name,
         "mode": state.mode, "target_power": state.target_power, "resistance": state.resistance,
         "hr_connected": state.hr_connected, "hr_name": state.hr_name,
         "pm_connected": state.pm_connected, "pm_name": state.pm_name, "use_pm": state.use_pm,
         "ant_connected": state.ant_connected, "ant_device_id": state.ant_device_id,
+        "ant_trainer_connected": state.ant_device_id > 0,
         "ant_available": ANT_AVAILABLE,
+        "recording": state.recording,
     }))
+    # Also send current telemetry so phone sees live data immediately
+    if state.latest:
+        await ws.send_text(json.dumps({
+            "type": "telemetry",
+            "data": state.latest,
+            "elapsed": round(time.time() - state.session_start, 0) if state.session_start and state.recording else 0,
+            "history": state.history[-120:] if state.history else [],
+        }))
     try:
         while True: await handle_message(json.loads(await ws.receive_text()))
     except WebSocketDisconnect:
