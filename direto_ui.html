@@ -33,7 +33,9 @@
   .tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); }
 
   .tab-page { display:none; }
-  .tab-page.active { display:grid; }
+  .tab-page.active { display:block; }
+  #tab-ride.active, #tab-plans.active, #tab-connect.active { display:grid; }
+  #tab-phone.active { display:flex; flex-direction:column; }
 
   /* ── RIDE TAB ── */
   #tab-ride { grid-template-columns:240px 1fr; height:calc(100vh - 98px); }
@@ -189,7 +191,7 @@
   .fake-field input { background:var(--border); border:1px solid var(--border2); color:var(--text); padding:8px 11px; font-family:'JetBrains Mono'; font-size:13px; outline:none; }
   .fake-field input:focus { border-color:var(--accent2); }
 
-  ::-webkit-scrollbar { width:4px; height:4px; }
+  ::-webkit-scrollbar { width:8px; height:8px; }
   input:-webkit-autofill,
   input:-webkit-autofill:hover,
   input:-webkit-autofill:focus {
@@ -203,7 +205,8 @@
   .int-cell::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
   .int-cell[type=number] { -moz-appearance:textfield; }
   ::-webkit-scrollbar-track { background:var(--bg); }
-  ::-webkit-scrollbar-thumb { background:var(--border2); }
+  ::-webkit-scrollbar-thumb { background:var(--border2); border-radius:4px; }
+  ::-webkit-scrollbar-thumb:hover { background:var(--muted); }
 
   /* ── MOBILE ── */
   @media (max-width: 768px) {
@@ -284,14 +287,15 @@
   <button class="tab-btn"        onclick="switchTab('connect')">Connect</button>
   <button class="tab-btn"        onclick="switchTab('plans')">Plans</button>
   <button class="tab-btn"        onclick="switchTab('strava')">Upload</button>
+  <button class="tab-btn"        onclick="switchTab('phone')">Phone</button>
   <button class="tab-btn"        onclick="switchTab('settings')">Settings</button>
 </div>
 
 <!-- ══════════════════════════════════════════════════════ RIDE TAB -->
 <div id="tab-ride" class="tab-page active">
 
-  <!-- LEFT: ERG + Slope + Quick Intervals + bottom bar -->
-  <div class="panel" style="justify-content:space-between">
+  <!-- LEFT: ERG + Slope + buttons -->
+  <div class="panel">
 
     <div>
       <div class="p-title">ERG Mode</div>
@@ -333,19 +337,7 @@
 
     <div style="height:1px;background:var(--border);margin:4px 0"></div>
 
-    <div>
-      <div class="p-title">Quick Intervals</div>
-      <div class="int-col-heads" style="grid-template-columns:1fr 1fr 44px 44px 16px">
-        <span class="int-ch">W</span><span class="int-ch">Sec</span><span class="int-ch">×</span><span class="int-ch">%</span><span></span>
-      </div>
-      <div class="int-rows" id="int-rows" style="max-height:160px"></div>
-      <div style="display:flex;gap:5px;margin-top:6px">
-        <button class="btn" onclick="addIntRow()" style="flex:1">+ Step</button>
-      </div>
-    </div>
-
-    <!-- Bottom bar pinned -->
-    <div style="border-top:1px solid var(--border);padding-top:10px;display:flex;flex-direction:column;gap:6px;margin-top:auto">
+    <div style="display:flex;flex-direction:column;gap:6px">
       <button class="btn" onclick="loadPlanToRide()" style="color:var(--accent3);border-color:var(--accent3)">Load Plan</button>
       <div style="display:flex;gap:5px">
         <button id="btn-sint" onclick="startIntervals()" disabled
@@ -364,6 +356,7 @@
         </button>
       </div>
     </div>
+
   </div>
 
   <!-- CENTRE: mode bar + stats + progress + chart -->
@@ -502,12 +495,23 @@
 </div>
 
 <!-- ══════════════════════════════════════════════════════ PLANS TAB -->
-<div id="tab-plans" class="tab-page">
+<div id="tab-plans" class="tab-page" style="grid-template-columns:290px 290px 1fr">
+  <div class="plans-sidebar" style="border-right:1px solid var(--border);overflow-y:auto">
+    <div class="p-title">Quick Intervals</div>
+    <div class="int-col-heads" style="grid-template-columns:1fr 1fr 44px 44px 16px">
+      <span class="int-ch">W</span><span class="int-ch">Sec</span><span class="int-ch">×</span><span class="int-ch">%</span><span></span>
+    </div>
+    <div class="int-rows" id="int-rows"></div>
+    <div style="display:flex;gap:5px;margin-top:6px">
+      <button class="btn" onclick="addIntRow()" style="flex:1">+ Step</button>
+      <button class="btn" onclick="loadPlanToRide()" style="flex:1;color:var(--accent3);border-color:var(--accent3)">Load Plan</button>
+    </div>
+  </div>
   <div class="plans-sidebar">
     <div class="p-title">Saved Plans</div>
     <button class="btn primary" onclick="newPlan()">+ New Plan</button>
     <div id="plan-list"></div>
-  </div>
+  </div></div>
   <div class="plan-editor" id="plan-editor">
     <div style="color:var(--muted);font-size:14px;margin-top:40px;text-align:center">Select a plan or create a new one</div>
   </div>
@@ -888,6 +892,7 @@ function handle(m) {
       document.getElementById('btn-pm-scan').style.display='block';
       log('All devices disconnected','ok');
       break;
+    case 'ant_connected':
       antConnected=true;
       document.getElementById('ant-dot').className='conn-dot ant';
       document.getElementById('ant-text').textContent='ANT+ Dongle';
@@ -895,12 +900,9 @@ function handle(m) {
       document.getElementById('btn-ant-connect').style.display='none';
       const antHrBtn=document.getElementById('btn-ant-hr-scan');
       if(antHrBtn) antHrBtn.style.display='block';
-      // Enable scan for trainer button
       const atb=document.getElementById('btn-ant-trainer-scan');
       if(atb){ atb.disabled=false; atb.style.opacity='1'; atb.style.pointerEvents='auto'; }
-
-      document.getElementById('ant-dev-label').textContent='ANT+ Trainer #'+m.device_id;
-      log('ANT+ trainer connected (id='+m.device_id+')','ok');
+      log('ANT+ dongle connected','ok');
       break;
     case 'ant_disconnected':
       antConnected=false;
@@ -950,11 +952,12 @@ function handle(m) {
       updateStats(m.data);
       if(m.history){
         chartData=m.history; drawChart();
-        // Recalculate total distance from history (speed km/h * interval in hours)
-        // Speed is clamped to 0 so distance never decreases
+        // Incremental distance — only add the latest interval, never recalculate from scratch
+        // This prevents floating point drift causing backwards movement at unit boundaries
         if(m.history.length>1){
-          totalDistKm=0;
-          for(let i=1;i<m.history.length;i++){
+          const i=m.history.length-1;
+          const avgPwr=(m.history[i].power + m.history[i-1].power)/2;
+          if(avgPwr>0){
             const dt=(m.history[i].t - m.history[i-1].t)/3600;
             const avgSpd=Math.max(0,(m.history[i].speed + m.history[i-1].speed)/2);
             totalDistKm += avgSpd * dt;
@@ -983,6 +986,11 @@ function handle(m) {
       // Update the big target display in the power stat block
       document.getElementById('sv-target').textContent=m.step.watts||'—';
       updateMode('interval', m.step.watts);
+      // Sync phone tab progress
+      const pip=document.getElementById('phone-int-prog'); if(pip) pip.style.display='flex';
+      const pps=document.getElementById('phone-prog-step'); if(pps) pps.textContent=`Step ${m.index+1}/${m.total}`;
+      const ppw=document.getElementById('phone-prog-watts'); if(ppw) ppw.textContent=m.step.watts;
+      const ppr=document.getElementById('phone-prog-rem'); if(ppr) ppr.textContent=m.step.duration;
       break;
     case 'interval_tick':
       document.getElementById('prog-rem').textContent=m.duration-m.elapsed;
@@ -990,6 +998,7 @@ function handle(m) {
       break;
     case 'interval_done': case 'interval_stopped':
       document.getElementById('int-prog').style.display='none';
+      const pip2=document.getElementById('phone-int-prog'); if(pip2) pip2.style.display='none';
       document.getElementById('btn-stopi').style.display='none';
       const sib=document.getElementById('btn-sint');
       if(sib){ sib.style.display='inline-block'; sib.disabled=false; sib.style.opacity='1'; }
@@ -1013,7 +1022,9 @@ function setConn(name) {
   ['btn-disc','btn-pw'].forEach(id=>{ const el=document.getElementById(id); if(el) el.disabled=false; });
   const rb=document.getElementById('btn-rec-start'); if(rb){ rb.disabled=false; rb.style.opacity='1'; }
   const si=document.getElementById('btn-sint'); if(si){ si.disabled=false; si.style.opacity='1'; }
-  document.getElementById('btn-scan').disabled=true;
+  const sb=document.getElementById('btn-scan');
+  if(sb){ sb.textContent='Scan for Trainer'; sb.classList.remove('scanning'); sb.disabled=true; }
+  document.getElementById('device-list').innerHTML='';
 }
 function setDisconn() {
   connected=false; clearInterval(timerInt);
@@ -1124,9 +1135,10 @@ function toggleSpeedUnit() {
   });
 }
 function updateMode(mode,tp) {
-  const p=document.getElementById('mode-pill');
   const labels={free:'FREE RIDE',erg:'ERG MODE',interval:'INTERVAL'};
-  p.className='mode-pill '+(mode||'free'); p.textContent=labels[mode]||'FREE RIDE';
+  const txt=labels[mode]||'FREE RIDE'; const cls='mode-pill '+(mode||'free');
+  const p=document.getElementById('mode-pill'); if(p){p.className=cls;p.textContent=txt;}
+  const pp=document.getElementById('phone-mode-pill'); if(pp){pp.className=cls;pp.textContent=txt;}
   if(tp!==undefined) document.getElementById('sv-target').textContent=tp||'—';
 }
 function renderDevices(devs) {
@@ -1165,7 +1177,7 @@ function renderPMDevices(devs) {
 }
 function startTimer() {
   elapsedSec=0; clearInterval(timerInt);
-  timerInt=setInterval(()=>{ elapsedSec++; const h=Math.floor(elapsedSec/3600),m=Math.floor((elapsedSec%3600)/60),s=elapsedSec%60; document.getElementById('elapsed').textContent=`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`; },1000);
+  timerInt=setInterval(()=>{ elapsedSec++; const h=Math.floor(elapsedSec/3600),m=Math.floor((elapsedSec%3600)/60),s=elapsedSec%60; const t=`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`; document.getElementById('elapsed').textContent=t; const pe=document.getElementById('phone-elapsed'); if(pe) pe.textContent=t; },1000);
 }
 function log(msg,type='muted') {
   const ts=new Date().toTimeString().slice(0,8);
@@ -1457,6 +1469,21 @@ function shutDown() {
   send({action:'shutdown'});
   setTimeout(()=>document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:monospace;color:#666;font-size:14px">Server stopped. You can close this tab.</div>',1000);
 }
+function nudgeErgPhone(d) {
+  const v=Math.max(0,Math.min(600,parseInt(document.getElementById('phone-pw-sl').value)+d));
+  document.getElementById('phone-pw-sl').value=v;
+  document.getElementById('phone-erg-disp').textContent=v;
+  document.getElementById('pw-sl').value=v;
+  document.getElementById('erg-disp').textContent=v;
+}
+function nudgeSlopePhone(d) {
+  const sl=document.getElementById('phone-slope-sl');
+  const v=Math.max(-10,Math.min(24,parseFloat(sl.value)+d));
+  sl.value=v.toFixed(1);
+  document.getElementById('phone-slope-disp').textContent=v.toFixed(1)+'%';
+  document.getElementById('slope-sl').value=v.toFixed(1);
+  document.getElementById('slope-disp-big').textContent=v.toFixed(1)+'%';
+}
 function antConnect() {
   send({action:'ant_connect', device_id: 0});
   log('Connecting ANT+ dongle…');
@@ -1526,6 +1553,74 @@ loadSettings();
 
 connectWS();
 </script>
+
+<!-- ══════════════════════════════════════════════════════ PHONE TAB -->
+<div id="tab-phone" class="tab-page" style="height:calc(100vh - 98px);overflow-y:auto;padding:16px;gap:16px">
+
+  <!-- Big time and distance -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <div style="background:var(--panel);border:1px solid var(--border);padding:16px;text-align:center">
+      <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Time</div>
+      <div id="phone-elapsed" style="font-family:'JetBrains Mono';font-size:52px;font-weight:700;line-height:1;color:var(--text)">00:00:00</div>
+    </div>
+    <div style="background:var(--panel);border:1px solid var(--border);padding:16px;text-align:center;cursor:pointer" onclick="toggleSpeedUnit()">
+      <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Distance</div>
+      <div id="phone-dist" style="font-family:'JetBrains Mono';font-size:52px;font-weight:700;line-height:1;color:var(--text)">0.0</div>
+      <div id="phone-dist-unit" style="font-size:12px;color:var(--muted);margin-top:4px">mi</div>
+    </div>
+  </div>
+
+  <!-- Mode / Progress -->
+  <div style="background:var(--panel);border:1px solid var(--border);padding:12px;text-align:center">
+    <div class="mode-pill free" id="phone-mode-pill" style="font-size:18px;display:inline-block">FREE RIDE</div>
+  </div>
+  <div id="phone-int-prog" style="display:none;background:var(--panel);border:1px solid var(--border);padding:12px;flex-direction:column;gap:6px">
+    <div style="display:flex;justify-content:space-between;font-size:11px;font-family:'JetBrains Mono';color:var(--muted)">
+      <span id="phone-prog-step">Step 1/1</span>
+      <span><strong id="phone-prog-watts">—</strong> W · <strong id="phone-prog-rem">—</strong>s left</span>
+    </div>
+    <div class="prog-track"><div class="prog-fill" id="phone-prog-fill" style="width:0%"></div></div>
+  </div>
+
+  <!-- ERG -->
+  <div style="background:var(--panel);border:1px solid var(--border);padding:16px">
+    <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);margin-bottom:8px">ERG Mode</div>
+    <div id="phone-erg-disp" style="font-family:'JetBrains Mono';font-size:72px;font-weight:700;color:var(--accent);text-align:center;line-height:1">150</div>
+    <div style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:12px">watts</div>
+    <input type="range" id="phone-pw-sl" min="0" max="600" value="150" step="5" style="width:100%;margin-bottom:12px"
+      oninput="document.getElementById('phone-erg-disp').textContent=this.value;document.getElementById('pw-sl').value=this.value;document.getElementById('erg-disp').textContent=this.value">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px">
+      <button class="nudge-btn" onclick="nudgeErgPhone(-25)">−25</button>
+      <button class="nudge-btn" onclick="nudgeErgPhone(-5)">−5</button>
+      <button class="nudge-btn" onclick="nudgeErgPhone(+5)">+5</button>
+      <button class="nudge-btn" onclick="nudgeErgPhone(+25)">+25</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <button class="btn primary" onclick="setPower()" id="btn-pw-phone">Set ERG</button>
+      <button class="btn danger" onclick="ergOff()">ERG Off</button>
+    </div>
+  </div>
+
+  <!-- Slope -->
+  <div style="background:var(--panel);border:1px solid var(--border);padding:16px">
+    <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Slope</div>
+    <div id="phone-slope-disp" style="font-family:'JetBrains Mono';font-size:72px;font-weight:700;color:#ff9f1c;text-align:center;line-height:1">0.0%</div>
+    <div style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:12px">gradient</div>
+    <input type="range" id="phone-slope-sl" min="-10" max="24" value="0" step="0.5" style="width:100%;margin-bottom:12px"
+      oninput="const v=parseFloat(this.value).toFixed(1);document.getElementById('phone-slope-disp').textContent=v+'%';document.getElementById('slope-sl').value=this.value;document.getElementById('slope-disp-big').textContent=v+'%'">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px">
+      <button class="nudge-btn" onclick="nudgeSlopePhone(-5)">−5%</button>
+      <button class="nudge-btn" onclick="nudgeSlopePhone(-1)">−1%</button>
+      <button class="nudge-btn" onclick="nudgeSlopePhone(+1)">+1%</button>
+      <button class="nudge-btn" onclick="nudgeSlopePhone(+5)">+5%</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <button class="btn" onclick="setSlope()" id="btn-slope-phone" style="border-color:#ff9f1c;color:#ff9f1c">Set Slope</button>
+      <button class="btn danger" onclick="flatSlope()">Flat 0%</button>
+    </div>
+  </div>
+
+</div>
 
 <!-- ══════════════════════════════════════════════════════ SETTINGS TAB -->
 <div id="tab-settings" class="tab-page" style="overflow-y:auto;padding:20px">

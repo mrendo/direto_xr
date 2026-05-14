@@ -1654,4 +1654,4 @@ async def handle_message(msg: dict):
 
 
 if __name__ == "__main__":
-    uvicorn.run("direto_server:app", host="127.0.0.1", port=8000, reload=False)
+    uvicorn.run("direto_server:app", host="0.0.0.0", port=8000, reload=False)
