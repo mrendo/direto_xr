@@ -513,7 +513,6 @@
     <div id="plan-list"></div>
   </div></div>
   <div class="plan-editor" id="plan-editor">
-    <div style="color:var(--muted);font-size:14px;margin-top:40px;text-align:center">Select a plan or create a new one</div>
   </div>
 </div>
 
@@ -788,6 +787,12 @@ function handle(m) {
   switch(m.type) {
     case 'status':
       if(m.connected) setConn(m.name);
+      else if(localStorage.getItem('last_trainer_addr')) {
+        // Auto-reconnect to last known trainer after 1s
+        const la=localStorage.getItem('last_trainer_addr');
+        const ln=localStorage.getItem('last_trainer_name')||la;
+        if(la && !connected) setTimeout(()=>{ log('Auto-reconnecting to '+ln+'…'); send({action:'connect',address:la,name:ln}); },1200);
+      }
       if(m.ant_connected) {
         antConnected=true;
         document.getElementById('ant-dot').className='conn-dot ant';
@@ -1017,6 +1022,9 @@ function handle(m) {
 // ── UI helpers ────────────────────────────────────────────────────────────────
 function setConn(name) {
   connected=true;
+  // Save for auto-reconnect on next page load
+  if(window._lastConnAddr) localStorage.setItem('last_trainer_addr', window._lastConnAddr);
+  if(name) localStorage.setItem('last_trainer_name', name);
   document.getElementById('conn-dot').className='conn-dot on';
   document.getElementById('conn-text').textContent='BLE Trainer';
   ['btn-disc','btn-pw'].forEach(id=>{ const el=document.getElementById(id); if(el) el.disabled=false; });
@@ -1092,6 +1100,10 @@ function updatePMSourceLabel() {
   if(lbl) lbl.style.color = usePM ? 'var(--accent2)' : 'var(--muted)';
 }
 function updateStats(d) {
+  // Sync phone tab live stats
+  if(d.power_w!==undefined){ const pp=document.getElementById('phone-power'); if(pp) pp.textContent=d.power_w; }
+  if(d.hr!==undefined){ const ph=document.getElementById('phone-hr'); if(ph) ph.textContent=d.hr||'—'; }
+  if(d.cadence_rpm!==undefined){ const pc=document.getElementById('phone-cad'); if(pc) pc.textContent=d.cadence_rpm; }
   if(d.power_w!==undefined)     document.getElementById('sv-power').textContent=d.power_w;
   if(d.cadence_rpm!==undefined) document.getElementById('sv-cad').textContent=d.cadence_rpm;
   if(d.speed_kmh!==undefined) {
@@ -1317,7 +1329,7 @@ async function deletePlan() {
   if(!currentPlanName||!confirm(`Delete "${currentPlanName}"?`)) return;
   await fetch(`/plans/${encodeURIComponent(currentPlanName)}`,{method:'DELETE'});
   delete savedPlans[currentPlanName]; currentPlanName=null; renderPlanList();
-  document.getElementById('plan-editor').innerHTML='<div style="color:var(--muted);font-size:14px;margin-top:40px;text-align:center">Select a plan or create a new one</div>';
+  document.getElementById('plan-editor').innerHTML='';
 }
 function loadEditorToRide() { intSteps=editorSteps.map(s=>({id:++nextId,...s,grade:s.grade??null})); renderIntRows(); switchTab('ride'); }
 
@@ -1557,15 +1569,34 @@ connectWS();
 <!-- ══════════════════════════════════════════════════════ PHONE TAB -->
 <div id="tab-phone" class="tab-page" style="height:calc(100vh - 98px);overflow-y:auto;padding:16px;gap:16px">
 
+  <!-- Live stats row -->
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+    <div style="background:var(--panel);border:1px solid var(--border);padding:10px;text-align:center">
+      <div style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Power</div>
+      <div id="phone-power" style="font-family:'JetBrains Mono';font-size:36px;font-weight:700;color:var(--accent);line-height:1">0</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:2px">W</div>
+    </div>
+    <div style="background:var(--panel);border:1px solid var(--border);padding:10px;text-align:center">
+      <div style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:4px">HR</div>
+      <div id="phone-hr" style="font-family:'JetBrains Mono';font-size:36px;font-weight:700;color:var(--accent4);line-height:1">—</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:2px">bpm</div>
+    </div>
+    <div style="background:var(--panel);border:1px solid var(--border);padding:10px;text-align:center">
+      <div style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Cadence</div>
+      <div id="phone-cad" style="font-family:'JetBrains Mono';font-size:36px;font-weight:700;line-height:1">0</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:2px">rpm</div>
+    </div>
+  </div>
+
   <!-- Big time and distance -->
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
     <div style="background:var(--panel);border:1px solid var(--border);padding:16px;text-align:center">
       <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Time</div>
-      <div id="phone-elapsed" style="font-family:'JetBrains Mono';font-size:52px;font-weight:700;line-height:1;color:var(--text)">00:00:00</div>
+      <div id="phone-elapsed" style="font-family:'JetBrains Mono';font-size:32px;font-weight:700;line-height:1;color:var(--text)">00:00:00</div>
     </div>
     <div style="background:var(--panel);border:1px solid var(--border);padding:16px;text-align:center;cursor:pointer" onclick="toggleSpeedUnit()">
       <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Distance</div>
-      <div id="phone-dist" style="font-family:'JetBrains Mono';font-size:52px;font-weight:700;line-height:1;color:var(--text)">0.0</div>
+      <div id="phone-dist" style="font-family:'JetBrains Mono';font-size:32px;font-weight:700;line-height:1;color:var(--text)">0.0</div>
       <div id="phone-dist-unit" style="font-size:12px;color:var(--muted);margin-top:4px">mi</div>
     </div>
   </div>

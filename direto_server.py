@@ -436,7 +436,7 @@ async def ble_notify_handler(_sender, data: bytearray):
         state.latest["power_w"]    = state.pm_power
         if state.pm_cadence > 0:
             state.latest["cadence_rpm"] = state.pm_cadence
-    if state.session_start:
+    if state.session_start and state.recording:
         t = round(time.time() - state.session_start, 1)
         state.history.append({
             "t": t,
