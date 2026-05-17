@@ -840,6 +840,7 @@ function handle(m) {
       break;
     case 'hr_update':
       document.getElementById('sv-hr').textContent=m.hr||'—';
+      { const ph=document.getElementById('phone-hr'); if(ph) ph.textContent=m.hr||'—'; }
       break;
     case 'pm_connected':    setPMConn(m.name); log(`Power meter: ${m.name}`,'ok'); break;
     case 'pm_disconnected': setPMDisconn(); log('Power meter disconnected'); break;
@@ -1111,9 +1112,10 @@ function updatePMSourceLabel() {
   if(lbl) lbl.style.color = usePM ? 'var(--accent2)' : 'var(--muted)';
 }
 function updateStats(d) {
+  if(!d) return;
   // Sync phone tab live stats
   if(d.power_w!==undefined){ const pp=document.getElementById('phone-power'); if(pp) pp.textContent=d.power_w; }
-  if(d.hr!==undefined){ const ph=document.getElementById('phone-hr'); if(ph) ph.textContent=d.hr||'—'; }
+  if(d.hr!==undefined||d.hr===0){ const ph=document.getElementById('phone-hr'); if(ph) ph.textContent=d.hr||'—'; }
   if(d.cadence_rpm!==undefined){ const pc=document.getElementById('phone-cad'); if(pc) pc.textContent=d.cadence_rpm; }
   if(d.power_w!==undefined)     document.getElementById('sv-power').textContent=d.power_w;
   if(d.cadence_rpm!==undefined) document.getElementById('sv-cad').textContent=d.cadence_rpm;
@@ -1232,7 +1234,14 @@ function disconnectHR()          { send({action:'disconnect_hr'}); }
 function zeroPM() { send({action:'zero_pm'}); log('Power meter: zero calibration sent…'); const b=document.getElementById('btn-pm-zero'); if(b){b.textContent='Zeroing…'; setTimeout(()=>b.textContent='Set Zero (Calibrate)',3000);} }
 function disconnectPM()          { send({action:'disconnect_pm'}); }
 function togglePMSource(on)      { send({action:'set_use_pm',enabled:on}); }
-function setPower()              { send({action:'set_power',watts:parseInt(document.getElementById('pw-sl').value)}); }
+function setPower() {
+  const activeTab=document.querySelector('.tab-page.active')?.id;
+  const v = activeTab==='tab-phone'
+    ? parseInt(document.getElementById('phone-pw-sl')?.value||0)
+    : parseInt(document.getElementById('pw-sl').value);
+  log(`Sending ERG: ${v}W`);
+  send({action:'set_power', watts:v});
+}
 
 function startIntervals() {
   const plan=intSteps.map(s=>({watts:s.watts,duration:s.duration,reps:s.reps,grade:s.grade,label:`${s.watts}W${s.grade!==null?` @${s.grade}%`:''}`}));
@@ -1526,7 +1535,14 @@ function scanAntHR() {
   if(b) b.textContent='Scanning ANT+ HR…';
 }
 function setSlope() {
-  send({action:'set_slope', grade:parseFloat(document.getElementById('slope-sl').value)});
+  // Read from whichever slope slider is active (phone or main)
+  const mainVal = parseFloat(document.getElementById('slope-sl').value);
+  const phoneVal = parseFloat(document.getElementById('phone-slope-sl')?.value || mainVal);
+  // Use phone value if we're on the phone tab
+  const activeTab = document.querySelector('.tab-page.active')?.id;
+  const grade = activeTab === 'tab-phone' ? phoneVal : mainVal;
+  log(`Sending slope: ${grade}%`);
+  send({action:'set_slope', grade});
 }
 
 // ── Session recording ─────────────────────────────────────────────────────────

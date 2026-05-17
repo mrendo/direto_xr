@@ -112,7 +112,7 @@ def _fit_crc(data: bytes) -> int:
         t = tbl[crc & 0xF]; crc = (crc >> 4) & 0x0FFF; crc ^= t ^ tbl[(b >> 4) & 0xF]
     return crc
 
-def build_fit(history: list, session_start: float) -> bytes:
+def build_fit(history: list, session_start: float, session_duration: float = 0) -> bytes:
     """
     Build a FIT activity file using fit-tool — a proper SDK-based library.
     This replaces the hand-crafted byte approach which had field number errors
@@ -130,7 +130,8 @@ def build_fit(history: list, session_start: float) -> bytes:
     )
 
     has_hr      = any(pt.get("hr", 0) > 0 for pt in history)
-    total_s     = int(history[-1]["t"] - history[0]["t"]) if len(history) > 1 else 0
+    # Use actual recording duration if available, otherwise fall back to history delta
+    total_s = int(session_duration) if session_duration else (int(history[-1]["t"] - history[0]["t"]) if len(history) > 1 else 0)
     avg_power   = int(sum(p.get("power",   0) for p in history) / max(len(history), 1))
     avg_cad     = int(sum(p.get("cadence", 0) for p in history) / max(len(history), 1))
     avg_spd_ms  = sum(p.get("speed", 0) / 3.6 for p in history) / max(len(history), 1)
@@ -168,6 +169,10 @@ def build_fit(history: list, session_start: float) -> bytes:
         rec.speed     = max(0.0, pt.get("speed", 0) / 3.6)  # m/s
         if has_hr:
             rec.heart_rate = max(0, min(254, int(pt.get("hr", 0))))
+        grade = pt.get("grade", 0)
+        if grade:
+            try: rec.grade = int(grade * 100)  # FIT grade in 0.01% units
+            except: pass
         builder.add(rec)
 
     # event: stop
@@ -334,6 +339,8 @@ class TrainerState:
         self.ant_hr_channel  = None   # separate ANT+ HR monitor channel
         # Session recording
         self.recording      = False   # True = actively recording a session
+        self.recording_start = None   # exact timestamp when REC was pressed
+        self.recording_end   = None   # exact timestamp when stopped
         self.ride_name      = ""      # name to use on upload
 
 state   = TrainerState()
@@ -439,11 +446,12 @@ async def ble_notify_handler(_sender, data: bytearray):
     if state.session_start and state.recording:
         t = round(time.time() - state.session_start, 1)
         state.history.append({
-            "t": t,
+            "t":       t,
             "power":   state.latest.get("power_w", 0),
             "cadence": state.latest.get("cadence_rpm", 0),
             "speed":   state.latest.get("speed_kmh", 0),
             "hr":      state.current_hr,
+            "grade":   state.ant_grade,  # current slope %
         })
         if len(state.history) > 36000: state.history = state.history[-36000:]
     await broadcast({"type": "telemetry", "data": state.latest,
@@ -711,7 +719,8 @@ async def _do_session_stop(auto_upload: str = "none", ride_name: str = ""):
     from datetime import datetime
     dt   = datetime.fromtimestamp(session_start).strftime("%Y-%m-%d %H:%M")
     name = f"{ride_name} — {dt}" if ride_name else f"Indoor Ride — {dt}"
-    fit_bytes = build_fit(history, session_start)
+    duration = (state.recording_end or time.time()) - state.recording_start if state.recording_start else 0
+    fit_bytes = build_fit(history, session_start, session_duration=duration)
 
     for platform in (["strava"] if auto_upload == "strava"
                      else ["garmin"] if auto_upload == "garmin"
@@ -1336,7 +1345,7 @@ async def handle_message(msg: dict):
                 logger.warning(f"[BLE] START_RESUME failed (non-fatal): {e}")
 
             state.connected = True; state.address = addr; state.name = msg.get("name", addr)
-            state.session_start = time.time(); state.history = []
+            state.session_start = time.time(); state.recording_start = time.time(); state.history = []
             await broadcast({"type": "connected", "name": state.name})
             logger.info(f"[BLE] Session started: {state.name}")
 
