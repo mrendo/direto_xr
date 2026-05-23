@@ -80,6 +80,9 @@
   .btn:active { opacity:.6; transform:scale(.98); }
   .nudge-btn { padding:10px 4px; font-size:14px; font-weight:700; font-family:'JetBrains Mono'; border:1px solid var(--border2); background:var(--panel); color:var(--text); cursor:pointer; border-radius:2px; text-align:center; transition:all .15s; width:100%; }
   .nudge-btn:active { opacity:.6; transform:scale(.97); background:var(--border); }
+  #tab-phone .nudge-btn { padding:20px 4px; font-size:26px; }
+  #tab-phone .btn { padding:18px 14px; font-size:18px; }
+  #tab-phone input[type=range] { height:16px; margin:14px 0; }
   .btn.scanning { border-color:var(--accent3) !important; color:var(--accent3) !important; animation:pulse .8s ease-in-out infinite; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
   .btn:hover  { border-color:var(--accent); color:var(--accent); }
@@ -859,6 +862,11 @@ function handle(m) {
       recording=true;
       document.getElementById('btn-rec-start').style.display='none';
       document.getElementById('btn-rec-stop').style.display='inline-block';
+      // Sync phone buttons
+      const prec=document.getElementById('phone-btn-rec-start'); if(prec) prec.style.display='none';
+      const precs=document.getElementById('phone-btn-rec-stop'); if(precs) precs.style.display='inline-block';
+      // Disable plan start while free ride running
+      ['btn-sint','phone-btn-sint'].forEach(id=>{ const e=document.getElementById(id); if(e){e.disabled=true;e.style.opacity='.4';} });
       // Reset all metrics
       totalDistKm=0; updateDistDisplay();
       lastSpeedKmh=0; updateSpeedDisplay();
@@ -999,6 +1007,8 @@ function handle(m) {
       document.getElementById('btn-stopi').style.display='inline-block';
       const psint=document.getElementById('phone-btn-sint'); if(psint) psint.style.display='none';
       const pstopi=document.getElementById('phone-btn-stopi'); if(pstopi) pstopi.style.display='inline-block';
+      // Disable free ride while plan running
+      ['btn-rec-start','phone-btn-rec-start'].forEach(id=>{ const e=document.getElementById(id); if(e){e.disabled=true;e.style.opacity='.4';} });
       // Toggle rec buttons
       recording=true;
       document.getElementById('btn-rec-start').style.display='none';
@@ -1618,30 +1628,30 @@ connectWS();
   <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
     <div style="background:var(--panel);border:1px solid var(--border);padding:10px;text-align:center">
       <div style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Power</div>
-      <div id="phone-power" style="font-family:'JetBrains Mono';font-size:36px;font-weight:700;color:var(--accent);line-height:1">0</div>
+      <div id="phone-power" style="font-family:'JetBrains Mono';font-size:72px;font-weight:700;color:var(--accent);line-height:1">0</div>
       <div style="font-size:10px;color:var(--muted);margin-top:2px">W</div>
     </div>
     <div style="background:var(--panel);border:1px solid var(--border);padding:10px;text-align:center">
       <div style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:4px">HR</div>
-      <div id="phone-hr" style="font-family:'JetBrains Mono';font-size:36px;font-weight:700;color:var(--accent4);line-height:1">—</div>
+      <div id="phone-hr" style="font-family:'JetBrains Mono';font-size:72px;font-weight:700;color:var(--accent4);line-height:1">—</div>
       <div style="font-size:10px;color:var(--muted);margin-top:2px">bpm</div>
     </div>
     <div style="background:var(--panel);border:1px solid var(--border);padding:10px;text-align:center">
       <div style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Cadence</div>
-      <div id="phone-cad" style="font-family:'JetBrains Mono';font-size:36px;font-weight:700;line-height:1">0</div>
+      <div id="phone-cad" style="font-family:'JetBrains Mono';font-size:72px;font-weight:700;line-height:1">0</div>
       <div style="font-size:10px;color:var(--muted);margin-top:2px">rpm</div>
     </div>
   </div>
 
-  <!-- Big time and distance -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+  <!-- Big time and distance stacked -->
+  <div style="display:flex;flex-direction:column;gap:8px">
     <div style="background:var(--panel);border:1px solid var(--border);padding:16px;text-align:center">
       <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Time</div>
-      <div id="phone-elapsed" style="font-family:'JetBrains Mono';font-size:32px;font-weight:700;line-height:1;color:var(--text)">00:00:00</div>
+      <div id="phone-elapsed" style="font-family:'JetBrains Mono';font-size:54px;font-weight:700;line-height:1;color:var(--text)">00:00:00</div>
     </div>
     <div style="background:var(--panel);border:1px solid var(--border);padding:16px;text-align:center;cursor:pointer" onclick="toggleSpeedUnit()">
       <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Distance</div>
-      <div id="phone-dist" style="font-family:'JetBrains Mono';font-size:32px;font-weight:700;line-height:1;color:var(--text)">0.0</div>
+      <div id="phone-dist" style="font-family:'JetBrains Mono';font-size:64px;font-weight:700;line-height:1;color:var(--text)">0.0</div>
       <div id="phone-dist-unit" style="font-size:12px;color:var(--muted);margin-top:4px">mi</div>
     </div>
   </div>
@@ -1656,25 +1666,6 @@ connectWS();
       <span><strong id="phone-prog-watts">—</strong> W · <strong id="phone-prog-rem">—</strong>s left</span>
     </div>
     <div class="prog-track"><div class="prog-fill" id="phone-prog-fill" style="width:0%"></div></div>
-  </div>
-
-  <!-- ERG -->
-  <div style="background:var(--panel);border:1px solid var(--border);padding:16px">
-    <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);margin-bottom:8px">ERG Mode</div>
-    <div id="phone-erg-disp" style="font-family:'JetBrains Mono';font-size:72px;font-weight:700;color:var(--accent);text-align:center;line-height:1">150</div>
-    <div style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:12px">watts</div>
-    <input type="range" id="phone-pw-sl" min="0" max="600" value="150" step="5" style="width:100%;margin-bottom:12px"
-      oninput="document.getElementById('phone-erg-disp').textContent=this.value;document.getElementById('pw-sl').value=this.value;document.getElementById('erg-disp').textContent=this.value">
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px">
-      <button class="nudge-btn" onclick="nudgeErgPhone(-25)">−25</button>
-      <button class="nudge-btn" onclick="nudgeErgPhone(-5)">−5</button>
-      <button class="nudge-btn" onclick="nudgeErgPhone(+5)">+5</button>
-      <button class="nudge-btn" onclick="nudgeErgPhone(+25)">+25</button>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      <button class="btn primary" onclick="setPower()" id="btn-pw-phone">Set ERG</button>
-      <button class="btn danger" onclick="ergOff()">ERG Off</button>
-    </div>
   </div>
 
   <!-- Slope -->
@@ -1693,6 +1684,25 @@ connectWS();
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
       <button class="btn" onclick="setSlope()" id="btn-slope-phone" style="border-color:#ff9f1c;color:#ff9f1c">Set Slope</button>
       <button class="btn danger" onclick="flatSlope()">Flat 0%</button>
+    </div>
+  </div>
+
+  <!-- ERG -->
+  <div style="background:var(--panel);border:1px solid var(--border);padding:16px">
+    <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);margin-bottom:8px">ERG Mode</div>
+    <div id="phone-erg-disp" style="font-family:'JetBrains Mono';font-size:72px;font-weight:700;color:var(--accent);text-align:center;line-height:1">150</div>
+    <div style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:12px">watts</div>
+    <input type="range" id="phone-pw-sl" min="0" max="600" value="150" step="5" style="width:100%;margin-bottom:12px"
+      oninput="document.getElementById('phone-erg-disp').textContent=this.value;document.getElementById('pw-sl').value=this.value;document.getElementById('erg-disp').textContent=this.value">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px">
+      <button class="nudge-btn" onclick="nudgeErgPhone(-25)">−25</button>
+      <button class="nudge-btn" onclick="nudgeErgPhone(-5)">−5</button>
+      <button class="nudge-btn" onclick="nudgeErgPhone(+5)">+5</button>
+      <button class="nudge-btn" onclick="nudgeErgPhone(+25)">+25</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <button class="btn primary" onclick="setPower()" id="btn-pw-phone">Set ERG</button>
+      <button class="btn danger" onclick="ergOff()">ERG Off</button>
     </div>
   </div>
 
