@@ -874,6 +874,8 @@ function handle(m) {
       recording=false;
       document.getElementById('btn-rec-stop').style.display='none';
       document.getElementById('btn-rec-start').style.display='inline-block';
+      const precs2=document.getElementById('phone-btn-rec-stop'); if(precs2) precs2.style.display='none';
+      const prec2=document.getElementById('phone-btn-rec-start'); if(prec2){ prec2.style.display='inline-block'; prec2.disabled=false; prec2.style.opacity='1'; }
       // Re-enable the start button (it stays enabled as long as trainer is connected)
       if(connected) {
         const rb=document.getElementById('btn-rec-start');
@@ -995,6 +997,8 @@ function handle(m) {
       // Toggle plan buttons
       document.getElementById('btn-sint').style.display='none';
       document.getElementById('btn-stopi').style.display='inline-block';
+      const psint=document.getElementById('phone-btn-sint'); if(psint) psint.style.display='none';
+      const pstopi=document.getElementById('phone-btn-stopi'); if(pstopi) pstopi.style.display='inline-block';
       // Toggle rec buttons
       recording=true;
       document.getElementById('btn-rec-start').style.display='none';
@@ -1024,6 +1028,8 @@ function handle(m) {
       document.getElementById('btn-stopi').style.display='none';
       const sib=document.getElementById('btn-sint');
       if(sib){ sib.style.display='inline-block'; sib.disabled=false; sib.style.opacity='1'; }
+      const psint2=document.getElementById('phone-btn-sint'); if(psint2){ psint2.style.display='inline-block'; psint2.disabled=false; psint2.style.opacity='1'; }
+      const pstopi2=document.getElementById('phone-btn-stopi'); if(pstopi2) pstopi2.style.display='none';
       // Reset timer, distance and target
       clearInterval(timerInt); timerInt=null; elapsedSec=0;
       document.getElementById('elapsed').textContent='00:00:00';
@@ -1047,6 +1053,9 @@ function setConn(name) {
   ['btn-disc','btn-pw'].forEach(id=>{ const el=document.getElementById(id); if(el) el.disabled=false; });
   const rb=document.getElementById('btn-rec-start'); if(rb){ rb.disabled=false; rb.style.opacity='1'; }
   const si=document.getElementById('btn-sint'); if(si){ si.disabled=false; si.style.opacity='1'; }
+  ['phone-btn-sint','phone-btn-rec-start'].forEach(id=>{ const e=document.getElementById(id); if(e){e.disabled=false;e.style.opacity='1';} });
+  // Sync phone buttons
+  ['phone-btn-sint','phone-btn-rec-start'].forEach(id=>{ const e=document.getElementById(id); if(e){e.disabled=false;e.style.opacity='1';} });
   const sb=document.getElementById('btn-scan');
   if(sb){ sb.textContent='Scan for Trainer'; sb.classList.remove('scanning'); sb.disabled=true; }
   document.getElementById('device-list').innerHTML='';
@@ -1490,11 +1499,15 @@ function nudgeSlope(d) {
 function ergOff() {
   document.getElementById('pw-sl').value=0;
   document.getElementById('erg-disp').textContent='0';
+  const psl=document.getElementById('phone-pw-sl'); if(psl) psl.value=0;
+  const ped=document.getElementById('phone-erg-disp'); if(ped) ped.textContent='0';
   setPower();
 }
 function flatSlope() {
   document.getElementById('slope-sl').value=0;
   document.getElementById('slope-disp-big').textContent='0.0%';
+  const psl=document.getElementById('phone-slope-sl'); if(psl) psl.value=0;
+  const psd=document.getElementById('phone-slope-disp'); if(psd) psd.textContent='0.0%';
   setSlope();
 }
 function resetApp() {
@@ -1680,6 +1693,22 @@ connectWS();
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
       <button class="btn" onclick="setSlope()" id="btn-slope-phone" style="border-color:#ff9f1c;color:#ff9f1c">Set Slope</button>
       <button class="btn danger" onclick="flatSlope()">Flat 0%</button>
+    </div>
+  </div>
+
+  <!-- Session controls -->
+  <div style="display:flex;flex-direction:column;gap:8px;padding-bottom:16px">
+    <div style="display:flex;gap:8px">
+      <button id="phone-btn-sint" onclick="startIntervals()" disabled
+        style="flex:1;background:var(--green);color:#0a0b0d;border:none;font-family:'Barlow Condensed';font-size:14px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:14px 10px;cursor:pointer;border-radius:2px;opacity:.4">▶ Start Plan</button>
+      <button id="phone-btn-stopi" onclick="stopIntervals()"
+        style="flex:1;background:var(--red);color:#fff;border:none;font-family:'Barlow Condensed';font-size:14px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:14px 10px;cursor:pointer;border-radius:2px;display:none">■ Stop Plan</button>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button id="phone-btn-rec-start" onclick="sessionStart()" disabled
+        style="flex:1;background:var(--green);color:#0a0b0d;border:none;font-family:'Barlow Condensed';font-size:14px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:14px 10px;cursor:pointer;border-radius:2px;opacity:.4">▶ Start Free Ride</button>
+      <button id="phone-btn-rec-stop" onclick="sessionStop()"
+        style="flex:1;background:var(--red);color:#fff;border:none;font-family:'Barlow Condensed';font-size:14px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:14px 10px;cursor:pointer;border-radius:2px;display:none">■ Stop Free Ride</button>
     </div>
   </div>
 
