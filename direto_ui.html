@@ -780,7 +780,13 @@ let nextId=10;
 
 // ── WebSocket ─────────────────────────────────────────────────────────────────
 let ws;
-function connectWS() { ws=new WebSocket('ws://localhost:8000/ws'); ws.onmessage=e=>handle(JSON.parse(e.data)); ws.onclose=()=>setTimeout(connectWS,2000); ws.onerror=()=>{}; }
+function connectWS() { 
+  const host=window.location.host; // uses same host:port as the page — works from phone too
+  ws=new WebSocket(`ws://${host}/ws`); 
+  ws.onmessage=e=>handle(JSON.parse(e.data)); 
+  ws.onclose=()=>setTimeout(connectWS,2000); 
+  ws.onerror=()=>{}; 
+}
 function send(o) { if(ws&&ws.readyState===1) ws.send(JSON.stringify(o)); }
 
 function handle(m) {
@@ -969,9 +975,8 @@ function handle(m) {
       updateStats(m.data);
       if(m.history){
         chartData=m.history; drawChart();
-        // Incremental distance — only add the latest interval, never recalculate from scratch
-        // This prevents floating point drift causing backwards movement at unit boundaries
-        if(m.history.length>1){
+        // Only accumulate distance when actively recording
+        if(recording && m.history.length>1){
           const i=m.history.length-1;
           const avgPwr=(m.history[i].power + m.history[i-1].power)/2;
           if(avgPwr>0){
