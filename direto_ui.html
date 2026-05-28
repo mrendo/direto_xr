@@ -823,8 +823,31 @@ function handle(m) {
       if(m.ant_available===false) { const b=document.getElementById('btn-ant-connect'); if(b){b.title='openant not installed';b.style.opacity='.4';} }
       if(m.recording) {
         recording=true;
-        document.getElementById('btn-rec-start').style.display='none';
-        document.getElementById('btn-rec-stop').style.display='inline-block';
+        if(m.mode==='interval') {
+          // Plan is running — show stop plan, hide start plan
+          document.getElementById('btn-sint').style.display='none';
+          document.getElementById('btn-stopi').style.display='inline-block';
+          const psint=document.getElementById('phone-btn-sint'); if(psint) psint.style.display='none';
+          const pstopi=document.getElementById('phone-btn-stopi'); if(pstopi) pstopi.style.display='inline-block';
+          // Disable free ride
+          ['btn-rec-start','phone-btn-rec-start'].forEach(id=>{ const e=document.getElementById(id); if(e){e.disabled=true;e.style.opacity='.4';} });
+          document.getElementById('btn-rec-start').style.display='none';
+          document.getElementById('btn-rec-stop').style.display='inline-block';
+          const prs=document.getElementById('phone-btn-rec-start'); if(prs) prs.style.display='none';
+          const prss=document.getElementById('phone-btn-rec-stop'); if(prss) prss.style.display='inline-block';
+          // Show interval progress
+          document.getElementById('int-prog').style.display='flex';
+          const pip=document.getElementById('phone-int-prog'); if(pip) pip.style.display='flex';
+        } else {
+          // Free ride running — show stop free ride, hide start
+          document.getElementById('btn-rec-start').style.display='none';
+          document.getElementById('btn-rec-stop').style.display='inline-block';
+          const prs2=document.getElementById('phone-btn-rec-start'); if(prs2) prs2.style.display='none';
+          const prss2=document.getElementById('phone-btn-rec-stop'); if(prss2) prss2.style.display='inline-block';
+          // Disable plan start
+          ['btn-sint','phone-btn-sint'].forEach(id=>{ const e=document.getElementById(id); if(e){e.disabled=true;e.style.opacity='.4';} });
+        }
+        startTimer();
       }
       updateMode(m.mode, m.target_power);
       break;
@@ -983,6 +1006,11 @@ function handle(m) {
       break;
     case 'telemetry':
       updateStats(m.data);
+      // Sync timer from server elapsed (prevents UI timer drift/reset issues)
+      if(recording && m.elapsed && m.elapsed > 0) {
+        const se=Math.round(m.elapsed);
+        if(Math.abs(se - elapsedSec) > 2) { elapsedSec=se; updateTimerDisplay(se); }
+      }
       if(m.history){
         chartData=m.history; drawChart();
         // Only accumulate distance when actively recording
@@ -1009,10 +1037,26 @@ function handle(m) {
       const pstopi=document.getElementById('phone-btn-stopi'); if(pstopi) pstopi.style.display='inline-block';
       // Disable free ride while plan running
       ['btn-rec-start','phone-btn-rec-start'].forEach(id=>{ const e=document.getElementById(id); if(e){e.disabled=true;e.style.opacity='.4';} });
-      // Toggle rec buttons
+      // Hide rec start, show rec stop
       recording=true;
       document.getElementById('btn-rec-start').style.display='none';
       document.getElementById('btn-rec-stop').style.display='inline-block';
+      // Sync phone rec buttons
+      const prs=document.getElementById('phone-btn-rec-start'); if(prs) prs.style.display='none';
+      const prss=document.getElementById('phone-btn-rec-stop'); if(prss) prss.style.display='inline-block';
+      // Reset all stats and start timer — same as session_started
+      totalDistKm=0; updateDistDisplay();
+      lastSpeedKmh=0; updateSpeedDisplay();
+      document.getElementById('sv-power').textContent='0';
+      document.getElementById('sv-hr').textContent='—';
+      document.getElementById('sv-cad').textContent='0';
+      document.getElementById('sv-target').textContent='—';
+      chartData=[]; drawChart();
+      clearInterval(timerInt); elapsedSec=0;
+      document.getElementById('elapsed').textContent='00:00:00';
+      const pe=document.getElementById('phone-elapsed'); if(pe) pe.textContent='00:00:00';
+      startTimer();
+      log('Plan started','ok');
       break;
     case 'interval_step':
       document.getElementById('prog-step').textContent=`Step ${m.index+1}/${m.total}${m.reps>1?` (rep ${m.rep}/${m.reps})`:''}`;
@@ -1226,7 +1270,14 @@ function renderPMDevices(devs) {
 }
 function startTimer() {
   elapsedSec=0; clearInterval(timerInt);
-  timerInt=setInterval(()=>{ elapsedSec++; const h=Math.floor(elapsedSec/3600),m=Math.floor((elapsedSec%3600)/60),s=elapsedSec%60; const t=`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`; document.getElementById('elapsed').textContent=t; const pe=document.getElementById('phone-elapsed'); if(pe) pe.textContent=t; },1000);
+  // Tick locally every second as fallback; server elapsed syncs on each telemetry
+  timerInt=setInterval(()=>{ elapsedSec++; updateTimerDisplay(elapsedSec); },1000);
+}
+function updateTimerDisplay(sec) {
+  const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;
+  const t=`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  document.getElementById('elapsed').textContent=t;
+  const pe=document.getElementById('phone-elapsed'); if(pe) pe.textContent=t;
 }
 function log(msg,type='muted') {
   const ts=new Date().toTimeString().slice(0,8);
