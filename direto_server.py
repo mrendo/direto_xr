@@ -455,7 +455,7 @@ async def ble_notify_handler(_sender, data: bytearray):
         })
         if len(state.history) > 36000: state.history = state.history[-36000:]
     await broadcast({"type": "telemetry", "data": state.latest,
-                     "elapsed": round(time.time() - state.session_start, 0) if state.session_start else 0,
+                     "elapsed": round(time.time() - state.recording_start, 0) if state.recording_start and state.recording else 0,
                      "history": state.history[-120:]})
 
 async def write_cp(payload: bytes):

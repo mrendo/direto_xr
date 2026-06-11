@@ -1006,10 +1006,10 @@ function handle(m) {
       break;
     case 'telemetry':
       updateStats(m.data);
-      // Sync timer from server elapsed (prevents UI timer drift/reset issues)
-      if(recording && m.elapsed && m.elapsed > 0) {
+      // Sync timer from server elapsed (source of truth = recording_start on server)
+      if(recording && m.elapsed > 0) {
         const se=Math.round(m.elapsed);
-        if(Math.abs(se - elapsedSec) > 2) { elapsedSec=se; updateTimerDisplay(se); }
+        elapsedSec=se; updateTimerDisplay(se);
       }
       if(m.history){
         chartData=m.history; drawChart();
@@ -1210,12 +1210,16 @@ function updateDistDisplay() {
   const el=document.getElementById('sv-dist');
   const unit=document.getElementById('sv-dist-unit');
   if(!el||!unit) return;
+  const pd=document.getElementById('phone-dist');
+  const pdu=document.getElementById('phone-dist-unit');
   if(speedUnit==='mph') {
-    el.textContent=(totalDistKm*0.621371).toFixed(2);
-    unit.textContent='mi';
+    const v=(totalDistKm*0.621371).toFixed(2);
+    el.textContent=v; unit.textContent='mi';
+    if(pd) pd.textContent=v; if(pdu) pdu.textContent='mi';
   } else {
-    el.textContent=totalDistKm.toFixed(2);
-    unit.textContent='km';
+    const v=totalDistKm.toFixed(2);
+    el.textContent=v; unit.textContent='km';
+    if(pd) pd.textContent=v; if(pdu) pdu.textContent='km';
   }
 }
 function toggleSpeedUnit() {
